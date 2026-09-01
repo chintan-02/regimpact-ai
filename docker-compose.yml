@@ -1,0 +1,136 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: regimpact
+      POSTGRES_USER: regimpact
+      POSTGRES_PASSWORD: regimpact
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U regimpact -d regimpact"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - regimpact_postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - regimpact_redis:/data
+
+  api:
+    build: ./apps/api
+    environment:
+      REGIMPACT_DATABASE_URL: postgresql+psycopg://regimpact:regimpact@postgres:5432/regimpact
+      REGIMPACT_OBJECT_STORAGE_ROOT: /data/objects
+      REGIMPACT_REDIS_URL: redis://redis:6379/0
+      REGIMPACT_SOURCE_ALLOWED_DOMAINS: www.aer.ca
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - regimpact_objects:/data/objects
+
+  web:
+    build: ./apps/web
+    environment:
+      REGIMPACT_API_BASE_URL: http://api:8000
+      REGIMPACT_ORGANIZATION_ID: 11111111-1111-4111-8111-111111111111
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+
+  seed:
+    build: ./apps/api
+    profiles: ["demo"]
+    command: ["python", "-m", "regimpact.seed_demo"]
+    environment:
+      REGIMPACT_DATABASE_URL: postgresql+psycopg://regimpact:regimpact@postgres:5432/regimpact
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    build: ./apps/api
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      REGIMPACT_DATABASE_URL: postgresql+psycopg://regimpact:regimpact@postgres:5432/regimpact
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build: ./apps/api
+    command: ["dramatiq", "regimpact.tasks", "--processes", "1", "--threads", "4"]
+    environment:
+      REGIMPACT_DATABASE_URL: postgresql+psycopg://regimpact:regimpact@postgres:5432/regimpact
+      REGIMPACT_REDIS_URL: redis://redis:6379/0
+      REGIMPACT_OBJECT_STORAGE_ROOT: /data/objects
+      REGIMPACT_SOURCE_ALLOWED_DOMAINS: www.aer.ca
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - regimpact_objects:/data/objects
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  dispatcher:
+    build: ./apps/api
+    command: ["python", "-m", "regimpact.dispatcher"]
+    environment:
+      REGIMPACT_DATABASE_URL: postgresql+psycopg://regimpact:regimpact@postgres:5432/regimpact
+      REGIMPACT_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  scheduler:
+    build: ./apps/api
+    command: ["python", "-m", "regimpact.scheduler"]
+    environment:
+      REGIMPACT_DATABASE_URL: postgresql+psycopg://regimpact:regimpact@postgres:5432/regimpact
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  regimpact_postgres:
+  regimpact_objects:
+  regimpact_redis:

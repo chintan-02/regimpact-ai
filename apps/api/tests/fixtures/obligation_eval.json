@@ -1,0 +1,35 @@
+[
+  {
+    "id": "binding_deadline",
+    "text": "Operators must notify the regulator within 24 hours of a reportable incident.",
+    "expected": ["Operators must notify the regulator within 24 hours of a reportable incident."]
+  },
+  {
+    "id": "prohibition",
+    "text": "Licensees shall not disclose protected records.",
+    "expected": ["Licensees shall not disclose protected records."]
+  },
+  {
+    "id": "required_to",
+    "text": "The operator is required to submit an annual assurance statement.",
+    "expected": ["The operator is required to submit an annual assurance statement."]
+  },
+  {
+    "id": "two_obligations",
+    "text": "Operators must retain records for seven years. Auditors shall review the register quarterly.",
+    "expected": [
+      "Operators must retain records for seven years.",
+      "Auditors shall review the register quarterly."
+    ]
+  },
+  {
+    "id": "advisory_only",
+    "text": "Operators may retain a courtesy copy and should review it periodically.",
+    "expected": []
+  },
+  {
+    "id": "descriptive_text",
+    "text": "This section describes the regulator's reporting portal and contact information.",
+    "expected": []
+  }
+]
