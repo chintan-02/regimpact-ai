@@ -16,8 +16,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: pip install -e '.[dev]'
       - name: Test deterministic domain core
-        run: make test-api
+        working-directory: apps/api
+        run: pytest -q tests/test_change_detection.py tests/test_mapping_evaluation.py
 
   api-postgres-integration:
     runs-on: ubuntu-latest
