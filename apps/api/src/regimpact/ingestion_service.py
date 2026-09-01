@@ -128,6 +128,9 @@ def process_ingestion_job(
             raw_content=extracted.normalized_text,
             sections=extracted.sections,
         )
+        # Persist a newly created version before referencing it from the job.
+        # The records use scalar UUIDs, so SQLAlchemy cannot infer flush order.
+        session.flush()
         job.resulting_version_id = result.version.id
         job.status = "completed"
         job.completed_at = utc_now()
