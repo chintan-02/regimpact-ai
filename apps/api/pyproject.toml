@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "regimpact-api"
-version = "0.3.0a4"
+version = "0.3.0"
 description = "RegImpact AI API"
 requires-python = ">=3.12"
 dependencies = [
