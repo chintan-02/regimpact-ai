@@ -67,6 +67,14 @@ export type Ingestion = {
   content_hash: string;
   resulting_version_id: string | null;
   error_code: string | null;
+  error_message: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  failure_class: string | null;
+  next_retry_at: string | null;
+  lease_expires_at: string | null;
+  last_heartbeat_at: string | null;
+  replay_count: number;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
@@ -146,3 +154,12 @@ export type ReviewItem = {
 };
 
 export type ReviewQueue = { items: ReviewItem[]; total: number; limit: number; offset: number };
+
+export type OperationalSnapshot = {
+  generated_at: string;
+  uptime_seconds: number;
+  requests: { total: number; server_errors: number };
+  ingestions: Record<string, number>;
+  outbox_pending: number;
+  outbox_dead_letter: number;
+};

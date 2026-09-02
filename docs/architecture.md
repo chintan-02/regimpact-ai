@@ -1,5 +1,13 @@
 # Architecture
 
+## Identity boundary (v0.3A)
+
+The browser authenticates through a Next.js server route. The resulting short-lived token remains
+in an HTTP-only cookie and is forwarded server-side to FastAPI. FastAPI validates token lifetime,
+issuer, audience, organization, active-user state, and the current database role before resolving
+tenant-scoped data. Background services retain explicit internal service identities and never use
+browser credentials.
+
 ## Target system
 
 ```mermaid

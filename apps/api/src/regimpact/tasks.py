@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from uuid import UUID
 
 import dramatiq
@@ -15,14 +16,15 @@ from .database import SessionFactory
 from .db_models import AuditEventRecord, IngestionJobRecord
 from .domain import utc_now
 from .ingestion import DevelopmentAllowScanner, UnavailableScanner
-from .ingestion_service import process_ingestion_job
+from .ingestion_service import (
+    IngestionLeaseUnavailable,
+    claim_ingestion_job,
+    process_ingestion_job,
+    retry_delay_seconds,
+)
 from .source_client import SafeSourceClient
 from .source_monitor import run_source_check
-from .storage import LocalObjectStorage
-
-
-def _retry_delay_ms(attempt: int) -> int:
-    return min(1_000 * (2 ** max(attempt - 1, 0)), 60_000)
+from .storage import configured_object_storage
 
 
 @dramatiq.actor(
@@ -30,9 +32,19 @@ def _retry_delay_ms(attempt: int) -> int:
 )
 def process_ingestion(job_id: str, organization_id: str) -> None:
     settings = get_settings()
-    storage = LocalObjectStorage(settings.object_storage_root)
+    storage = configured_object_storage(settings)
     with SessionFactory() as session:
         try:
+            with session.begin():
+                claimed = claim_ingestion_job(
+                    session,
+                    job_id=UUID(job_id),
+                    organization_id=UUID(organization_id),
+                    lease_seconds=settings.ingestion_lease_seconds,
+                )
+            if claimed is None:
+                return
+            _, lease_token = claimed
             with session.begin():
                 process_ingestion_job(
                     session,
@@ -40,8 +52,11 @@ def process_ingestion(job_id: str, organization_id: str) -> None:
                     organization_id=UUID(organization_id),
                     storage=storage,
                     max_pdf_pages=settings.max_pdf_pages,
+                    lease_token=lease_token,
                 )
-        except OSError as exc:
+        except IngestionLeaseUnavailable:
+            return
+        except (OSError, TimeoutError, ConnectionError) as exc:
             with session.begin():
                 job = session.scalar(
                     select(IngestionJobRecord).where(
@@ -52,11 +67,16 @@ def process_ingestion(job_id: str, organization_id: str) -> None:
                 if job is None:
                     return
                 job.attempt_count += 1
+                job.failure_class = "transient"
+                job.error_code = type(exc).__name__
+                job.error_message = str(exc)[:2_000]
+                job.lease_token = None
+                job.lease_expires_at = None
+                job.last_heartbeat_at = utc_now()
                 if job.attempt_count >= job.max_attempts:
                     job.status = "dead_letter"
-                    job.error_code = type(exc).__name__
-                    job.error_message = str(exc)[:2_000]
                     job.completed_at = utc_now()
+                    job.next_retry_at = None
                     session.add(
                         AuditEventRecord(
                             organization_id=job.organization_id,
@@ -70,9 +90,27 @@ def process_ingestion(job_id: str, organization_id: str) -> None:
                         )
                     )
                     return
+                delay_seconds = retry_delay_seconds(
+                    job.attempt_count,
+                    base=settings.ingestion_retry_base_seconds,
+                    cap=settings.ingestion_retry_cap_seconds,
+                )
                 job.status = "queued"
+                job.next_retry_at = utc_now() + timedelta(seconds=delay_seconds)
+                session.add(
+                    AuditEventRecord(
+                        organization_id=job.organization_id,
+                        actor_id="system:worker",
+                        event_type="ingestion.retry_scheduled",
+                        entity_type="ingestion_job",
+                        entity_id=job.id,
+                        detail_json=json.dumps(
+                            {"attempt_count": job.attempt_count, "delay_seconds": delay_seconds}
+                        ),
+                    )
+                )
             raise Retry(
-                message="transient ingestion failure", delay=_retry_delay_ms(job.attempt_count)
+                message="transient ingestion failure", delay=delay_seconds * 1_000
             )
 
 
@@ -96,5 +134,5 @@ def check_regulatory_source(source_id: str, organization_id: str) -> None:
             organization_id=UUID(organization_id),
             client=client,
             scanner=scanner,
-            storage=LocalObjectStorage(settings.object_storage_root),
+            storage=configured_object_storage(settings),
         )

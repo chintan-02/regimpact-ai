@@ -9,6 +9,18 @@ permissions:
   contents: read
 
 jobs:
+  infrastructure-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-azd@v2
+      - name: Compile Bicep templates
+        run: az bicep build --file infra/main.bicep
+      - name: Reject generated secrets and local environment files
+        run: |
+          test ! -f .env
+          ! git grep -nE 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}'
+
   api-domain-tests:
     runs-on: ubuntu-latest
     steps:

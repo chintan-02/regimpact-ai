@@ -27,3 +27,6 @@ This provides at-least-once delivery. All worker handlers must therefore be idem
 ## Production constraints
 
 Redis is not the source of truth. Queue depth is operational state; authoritative status remains in PostgreSQL. Production deployment must add Redis authentication/TLS, network isolation, managed persistence, metrics and alerting.
+
+The durable retry, lease, dead-letter, and recovery contract is documented in
+[`ingestion-reliability.md`](ingestion-reliability.md).

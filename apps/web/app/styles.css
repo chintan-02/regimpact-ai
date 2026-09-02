@@ -141,9 +141,30 @@ input, select, textarea { border: 1px solid #aaa396; background: white; color: v
 .coverageSheet td:first-child { display: table-cell; overflow-wrap: anywhere; }
 .coverageSheet td:first-child .sectionNo { display: block; margin-bottom: 7px; }
 .skeleton { background: linear-gradient(90deg, #e6e1d6 25%, #f5f2eb 50%, #e6e1d6 75%); background-size: 200% 100%; animation: pulse 1.4s infinite; color: transparent; border-radius: 3px; }
+.sessionIdentity { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.organization { text-transform: capitalize; }
+.logoutButton { border: 1px solid #5a5953; background: transparent; color: #f4f0e8; border-radius: 3px; padding: 8px 10px; cursor: pointer; }
+.loginShell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--paper); }
+.loginPanel { width: min(460px, 100%); padding: 42px; background: var(--surface); border: 1px solid var(--rule); border-top: 5px solid var(--cobalt); border-radius: var(--radius); }
+.loginPanel h1 { margin: 8px 0 12px; font-size: 42px; }
+.loginPanel > p:not(.eyebrow) { color: var(--muted); line-height: 1.55; }
+.loginForm { display: grid; gap: 10px; margin-top: 28px; }
+.loginForm label { margin-top: 8px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.loginError { margin: 4px 0; padding: 10px; color: #8c2e25; background: #f9e9e6; border-left: 3px solid var(--red); }
+.primaryButton { margin-top: 10px; border: 0; border-radius: 4px; padding: 13px 16px; color: white; background: var(--cobalt); font-weight: 800; cursor: pointer; }
+.primaryButton:disabled { opacity: .65; cursor: wait; }
+.readOnlyNotice { margin-top: 20px; padding: 14px; color: var(--muted); background: #ede9df; border-left: 3px solid #77736a; }
+.operationsSheet { padding: 28px; }
+.operationsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 24px 0 0; background: var(--rule); border: 1px solid var(--rule); }
+.operationsGrid > div { padding: 24px; background: var(--surface); }
+.operationsGrid dt { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.operationsGrid dd { margin: 8px 0; font-family: Georgia, serif; font-size: 24px; font-weight: 700; }
+.operationsGrid p, .snapshotTime { color: var(--muted); line-height: 1.5; }
+.snapshotTime { margin: 18px 0 0; font-size: 12px; }
 @keyframes pulse { to { background-position: -200% 0; } }
 @media (max-width: 900px) { .commandRail { grid-template-columns: 1fr auto; padding: 0 20px; } nav { display: none; } .masthead { padding: 36px 24px 24px; } .signalStrip { margin: 0 24px; grid-template-columns: 1fr 1fr; } .workspace { grid-template-columns: 1fr; padding: 24px; } }
 @media (max-width: 1100px) { .controlGrid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 900px) { .statusMessage, .dataSheet, .diffMeta, .impactPanel, .workflowFilters { margin-left: 24px; margin-right: 24px; } .diffWorkspace, .detailWorkspace { grid-template-columns: 1fr; padding: 24px; } .controlGrid { margin-left: 24px; margin-right: 24px; grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .operationsGrid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { h1 { font-size: 40px; } .masthead { align-items: flex-start; gap: 24px; flex-direction: column; } .signalStrip { grid-template-columns: 1fr; } .signalStrip > div { border-right: 0; border-bottom: 1px solid var(--rule); } .register { overflow-x: auto; } table { min-width: 720px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }

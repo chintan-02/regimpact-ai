@@ -5,17 +5,17 @@ from dataclasses import asdict
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Header, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased
 
+from .auth import AdminUser, Authenticated
 from .calibration import CURRENT_POLICY
 from .config import get_settings
 from .database import get_session
 from .db_models import (
     IngestionJobRecord,
     ObligationRecord,
-    OrganizationRecord,
     OutboxEventRecord,
     RegulationRecord,
     RegulationVersionRecord,
@@ -26,7 +26,7 @@ from .db_models import (
 from .domain import Section, utc_now
 from .embeddings import configured_embedding_provider
 from .ingestion import DevelopmentAllowScanner, MalwareScanner, UnavailableScanner, validate_upload
-from .ingestion_service import queue_ingestion
+from .ingestion_service import queue_ingestion, replay_dead_letter
 from .obligation_service import extract_and_store_obligations
 from .repository import RegulationNotFoundError, SqlAlchemyVersionRepository, create_regulation
 from .retrieval import hybrid_search, index_version
@@ -56,23 +56,23 @@ from .schemas import (
     VersionSummary,
 )
 from .source_client import system_resolver, validate_source_url
-from .storage import LocalObjectStorage
+from .storage import ObjectStorage, configured_object_storage
 from .versioning import VersioningService
 
 router = APIRouter(prefix="/api/v1", tags=["regulations"])
 DbSession = Annotated[Session, Depends(get_session)]
 
 
-def organization_header(x_organization_id: Annotated[UUID, Header()]) -> UUID:
-    return x_organization_id
+def organization_header(user: Authenticated) -> UUID:
+    return user.organization_id
 
 
-def actor_header(x_actor_id: Annotated[str, Header(min_length=1, max_length=200)]) -> str:
-    return x_actor_id
+def actor_header(user: Authenticated) -> str:
+    return user.actor_id
 
 
-def local_storage() -> LocalObjectStorage:
-    return LocalObjectStorage(get_settings().object_storage_root)
+def object_storage() -> ObjectStorage:
+    return configured_object_storage(get_settings())
 
 
 def malware_scanner() -> MalwareScanner:
@@ -85,12 +85,14 @@ def malware_scanner() -> MalwareScanner:
 @router.post(
     "/organizations", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED
 )
-def add_organization(body: OrganizationCreate, session: DbSession) -> OrganizationResponse:
-    """Bootstrap endpoint; restricted to platform administrators when OIDC lands in v0.3."""
-    with session.begin():
-        record = OrganizationRecord(id=body.id, name=body.name)
-        session.add(record)
-    return OrganizationResponse.model_validate(record)
+def add_organization(
+    body: OrganizationCreate, session: DbSession, _admin: AdminUser
+) -> OrganizationResponse:
+    del body, session
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Organization provisioning is restricted to platform operations.",
+    )
 
 
 @router.post("/regulations", response_model=RegulationResponse, status_code=status.HTTP_201_CREATED)
@@ -98,6 +100,7 @@ def add_regulation(
     body: RegulationCreate,
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
+    _admin: AdminUser,
 ) -> RegulationResponse:
     with session.begin():
         record = create_regulation(
@@ -178,6 +181,7 @@ def ingest_version(
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
     actor_id: Annotated[str, Depends(actor_header)],
+    _admin: AdminUser,
 ) -> VersionResponse:
     with session.begin():
         repository = SqlAlchemyVersionRepository(session, organization_id, actor_id)
@@ -382,6 +386,7 @@ async def upload_regulation_document(
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
     actor_id: Annotated[str, Depends(actor_header)],
+    _admin: AdminUser,
     upload: Annotated[UploadFile, File(description="Signature-verified PDF or HTML")],
 ) -> IngestionJobResponse:
     settings = get_settings()
@@ -401,7 +406,8 @@ async def upload_regulation_document(
             regulation_id=regulation_id,
             actor_id=actor_id,
             document=document,
-            storage=local_storage(),
+            storage=object_storage(),
+            max_attempts=settings.ingestion_max_attempts,
         )
     response = IngestionJobResponse.model_validate(job)
     return response.model_copy(update={"created": created})
@@ -439,6 +445,32 @@ def list_ingestions(
     return [IngestionJobState.model_validate(job) for job in jobs]
 
 
+@router.post("/ingestions/{job_id}/replay", response_model=IngestionJobState)
+def replay_ingestion(
+    job_id: UUID,
+    session: DbSession,
+    organization_id: Annotated[UUID, Depends(organization_header)],
+    actor_id: Annotated[str, Depends(actor_header)],
+    _admin: AdminUser,
+) -> IngestionJobState:
+    with session.begin():
+        job = session.scalar(
+            select(IngestionJobRecord)
+            .where(
+                IngestionJobRecord.id == job_id,
+                IngestionJobRecord.organization_id == organization_id,
+            )
+            .with_for_update()
+        )
+        if job is None:
+            raise RegulationNotFoundError("ingestion job not found")
+        try:
+            replay_dead_letter(session, job=job, actor_id=actor_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return IngestionJobState.model_validate(job)
+
+
 @router.post(
     "/sources", response_model=RegulatorySourceResponse, status_code=status.HTTP_201_CREATED
 )
@@ -446,6 +478,7 @@ def add_regulatory_source(
     body: RegulatorySourceCreate,
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
+    _admin: AdminUser,
 ) -> RegulatorySourceResponse:
     settings = get_settings()
     url = str(body.url)
@@ -493,7 +526,7 @@ def queue_health(
         .where(
             OutboxEventRecord.organization_id == organization_id,
             OutboxEventRecord.published_at.is_(None),
-            OutboxEventRecord.attempt_count < 10,
+            OutboxEventRecord.dead_lettered_at.is_(None),
         )
     )
     exhausted_outbox = session.scalar(
@@ -502,7 +535,7 @@ def queue_health(
         .where(
             OutboxEventRecord.organization_id == organization_id,
             OutboxEventRecord.published_at.is_(None),
-            OutboxEventRecord.attempt_count >= 10,
+            OutboxEventRecord.dead_lettered_at.is_not(None),
         )
     )
     dead_letters = session.scalar(
@@ -561,6 +594,7 @@ def extract_version_obligations(
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
     actor_id: Annotated[str, Depends(actor_header)],
+    _admin: AdminUser,
 ) -> ObligationExtractionResponse:
     with session.begin():
         result = extract_and_store_obligations(
@@ -645,6 +679,7 @@ def create_search_index(
     version_id: UUID,
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
+    _admin: AdminUser,
 ) -> SearchIndexResponse:
     settings = get_settings()
     provider = configured_embedding_provider(

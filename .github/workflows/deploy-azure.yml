@@ -1,0 +1,141 @@
+name: deploy-azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options: [staging, production]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: regimpact-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      RESOURCE_GROUP: rg-regimpact-${{ inputs.environment }}
+      LOCATION: canadacentral
+      PARAM_FILE: infra/${{ inputs.environment }}.bicepparam
+      IMAGE_TAG: ${{ github.sha }}
+      POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      REGIMPACT_JWT_SECRET: ${{ secrets.REGIMPACT_JWT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate with Azure using OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create resource group
+        run: az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --tags application=regimpact-ai environment="${{ inputs.environment }}" managedBy=bicep
+
+      - name: Validate infrastructure
+        run: >-
+          az deployment group validate
+          --resource-group "$RESOURCE_GROUP"
+          --template-file infra/main.bicep
+          --parameters "$PARAM_FILE"
+          deployWorkloads=false
+          postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}"
+          jwtSecret="${{ secrets.REGIMPACT_JWT_SECRET }}"
+
+      - name: Provision platform dependencies
+        id: foundation
+        run: |
+          az deployment group create \
+            --name "foundation-${GITHUB_RUN_ID}" \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters "$PARAM_FILE" deployWorkloads=false \
+              postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
+              jwtSecret="${{ secrets.REGIMPACT_JWT_SECRET }}" \
+            --query properties.outputs -o json > deployment-outputs.json
+          echo "registry=$(jq -r '.registryName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push immutable images
+        env:
+          REGISTRY: ${{ steps.foundation.outputs.registry }}
+        run: |
+          az acr login --name "$REGISTRY"
+          docker build -t "$REGISTRY.azurecr.io/regimpact-api:$IMAGE_TAG" apps/api
+          docker build -t "$REGISTRY.azurecr.io/regimpact-web:$IMAGE_TAG" apps/web
+          docker push "$REGISTRY.azurecr.io/regimpact-api:$IMAGE_TAG"
+          docker push "$REGISTRY.azurecr.io/regimpact-web:$IMAGE_TAG"
+
+      - name: Stage application workloads at zero replicas
+        id: application
+        env:
+          REGISTRY: ${{ steps.foundation.outputs.registry }}
+        run: |
+          az deployment group create \
+            --name "application-${GITHUB_RUN_ID}" \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters "$PARAM_FILE" deployWorkloads=true applicationMinReplicas=0 \
+              apiImage="$REGISTRY.azurecr.io/regimpact-api:$IMAGE_TAG" \
+              webImage="$REGISTRY.azurecr.io/regimpact-web:$IMAGE_TAG" \
+              postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
+              jwtSecret="${{ secrets.REGIMPACT_JWT_SECRET }}" \
+            --query properties.outputs -o json > deployment-outputs.json
+          echo "api_url=$(jq -r '.apiUrl.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "web_url=$(jq -r '.webUrl.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+          echo "migration_job=$(jq -r '.migrationJobName.value' deployment-outputs.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migrations
+        run: |
+          execution=$(az containerapp job start \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "${{ steps.application.outputs.migration_job }}" \
+            --query name -o tsv)
+          for attempt in {1..60}; do
+            status=$(az containerapp job execution show \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "${{ steps.application.outputs.migration_job }}" \
+              --job-execution-name "$execution" \
+              --query properties.status -o tsv)
+            if [ "$status" = "Succeeded" ]; then exit 0; fi
+            if [ "$status" = "Failed" ]; then exit 1; fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Promote migrated workloads
+        env:
+          REGISTRY: ${{ steps.foundation.outputs.registry }}
+        run: |
+          az deployment group create \
+            --name "promotion-${GITHUB_RUN_ID}" \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/main.bicep \
+            --parameters "$PARAM_FILE" deployWorkloads=true applicationMinReplicas=1 \
+              apiImage="$REGISTRY.azurecr.io/regimpact-api:$IMAGE_TAG" \
+              webImage="$REGISTRY.azurecr.io/regimpact-web:$IMAGE_TAG" \
+              postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
+              jwtSecret="${{ secrets.REGIMPACT_JWT_SECRET }}"
+
+      - name: Verify deployed health
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "${{ steps.application.outputs.web_url }}/login" > /dev/null; then exit 0; fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Publish deployment summary
+        run: |
+          echo "### RegImpact AI ${{ inputs.environment }} deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API (internal): ${{ steps.application.outputs.api_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Web: ${{ steps.application.outputs.web_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image tag: $IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"

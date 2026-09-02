@@ -20,7 +20,14 @@ class ApiContractTests(TestCase):
         self.assertEqual(response.headers["X-Request-ID"], "trace-123")
 
     def test_validation_error_uses_stable_envelope_and_generated_request_id(self):
-        response = asyncio.run(self.request("POST", "/api/v1/organizations", json={"name": "N"}))
+        response = asyncio.run(
+            self.request(
+                "POST",
+                "/api/v1/organizations",
+                headers={"X-Organization-ID": "11111111-1111-4111-8111-111111111111"},
+                json={"name": "N"},
+            )
+        )
         body = response.json()
         self.assertEqual(response.status_code, 422)
         self.assertEqual(body["error"]["code"], "request_validation_failed")
