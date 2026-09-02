@@ -151,13 +151,13 @@ jobs:
       - name: Verify deployed health
         env:
           WEB_URL: ${{ steps.application.outputs.web_url }}
-          EXPECTED_VERSION: 0.5.0a1
+          EXPECTED_VERSION: 0.5.0
         run: ./scripts/smoke-test-azure.sh
 
       - name: Capture operational deployment evidence
         if: inputs.environment == 'staging'
         env:
-          EXPECTED_VERSION: 0.5.0a1
+          EXPECTED_VERSION: 0.5.0
         run: ./scripts/validate-azure-staging.sh
 
       - name: Upload deployment evidence

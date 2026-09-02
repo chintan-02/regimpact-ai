@@ -2,7 +2,7 @@
 set -euo pipefail
 
 : "${RESOURCE_GROUP:=rg-regimpact-staging}"
-: "${EXPECTED_VERSION:=0.5.0a1}"
+: "${EXPECTED_VERSION:=0.5.0}"
 
 deployment=$(az deployment group list \
   --resource-group "$RESOURCE_GROUP" \
