@@ -1,5 +1,7 @@
 import asyncio
+import os
 from unittest import TestCase
+from unittest.mock import patch
 from uuid import uuid4
 
 import httpx
@@ -7,6 +9,8 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from regimpact.auth import hash_password, issue_access_token
+from regimpact.config import get_settings
 from regimpact.control_mapping import add_control, suggest_mappings
 from regimpact.database import Base, get_session
 from regimpact.db_models import (
@@ -16,6 +20,7 @@ from regimpact.db_models import (
     ObligationRecord,
     OrganizationRecord,
     RegulationRecord,
+    UserRecord,
 )
 from regimpact.domain import Section
 from regimpact.main import create_app
@@ -35,12 +40,21 @@ class ReviewWorkflowTests(TestCase):
         self.session = Session(self.engine, expire_on_commit=False)
         self.organization_id = uuid4()
         self.other_organization_id = uuid4()
+        self.user_id = uuid4()
         with self.session.begin():
             regulation_id = uuid4()
             self.session.add_all(
                 [
                     OrganizationRecord(id=self.organization_id, name="Northstar Energy"),
                     OrganizationRecord(id=self.other_organization_id, name="Other Tenant"),
+                    UserRecord(
+                        id=self.user_id,
+                        organization_id=self.organization_id,
+                        email="admin@example.test",
+                        display_name="Test Administrator",
+                        role="admin",
+                        password_hash=hash_password("Correct-Horse-2026!"),
+                    ),
                     RegulationRecord(
                         id=regulation_id,
                         organization_id=self.organization_id,
@@ -101,6 +115,7 @@ class ReviewWorkflowTests(TestCase):
             "X-Organization-ID": str(organization_id or self.organization_id),
             "X-Actor-ID": "development:test-analyst",
         }
+        headers.update(kwargs.pop("headers", {}))
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             return await client.request(method, path, headers=headers, **kwargs)
@@ -160,6 +175,42 @@ class ReviewWorkflowTests(TestCase):
             ),
             1,
         )
+
+    def test_database_authenticated_user_can_record_decision(self) -> None:
+        user = self.session.get(UserRecord, self.user_id)
+        assert user is not None
+
+        def independent_session_override():  # type: ignore[no-untyped-def]
+            with Session(self.engine, expire_on_commit=False) as session:
+                yield session
+
+        self.app.dependency_overrides[get_session] = independent_session_override
+        path = (
+            f"/api/v1/obligations/{self.obligation_id}/mapping-decisions"
+            f"?mapping_id={self.mapping_id}"
+        )
+        with patch.dict(os.environ, {"REGIMPACT_AUTH_MODE": "jwt"}):
+            get_settings.cache_clear()
+            try:
+                token, _ = issue_access_token(user)
+                response = asyncio.run(
+                    self.request(
+                        "POST",
+                        path,
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={
+                            "decision": "deferred",
+                            "rationale": "Control-owner confirmation is required.",
+                            "expected_revision": 0,
+                            "idempotency_key": "authenticated-review-action",
+                        },
+                    )
+                )
+            finally:
+                get_settings.cache_clear()
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["decision"], "deferred")
+        self.assertEqual(response.json()["actor_id"], f"user:{self.user_id}")
 
     def test_tenant_cannot_read_or_decide_another_tenants_work(self) -> None:
         queue = asyncio.run(self.request("GET", "/api/v1/review-queue", self.other_organization_id))

@@ -6,10 +6,11 @@ import json
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .auth import AdminUser, Authenticated, ReviewerUser
 from .control_mapping import add_control, suggest_mappings
 from .database import get_session
 from .db_models import ControlRecord, ControlVersionRecord, ObligationControlMappingRecord
@@ -24,12 +25,12 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1", tags=["controls"])
 
 
-def organization_header(x_organization_id: Annotated[UUID, Header()]) -> UUID:
-    return x_organization_id
+def organization_header(user: Authenticated) -> UUID:
+    return user.organization_id
 
 
-def actor_header(x_actor_id: Annotated[str, Header(min_length=1, max_length=200)]) -> str:
-    return x_actor_id
+def actor_header(user: Authenticated) -> str:
+    return user.actor_id
 
 
 def _latest_control_versions():  # type: ignore[no-untyped-def]
@@ -53,6 +54,7 @@ def create_control(
     body: ControlCreate,
     session: Annotated[Session, Depends(get_session)],
     organization_id: Annotated[UUID, Depends(organization_header)],
+    _admin: AdminUser,
 ) -> ControlResponse:
     with session.begin():
         control, version = add_control(
@@ -158,6 +160,7 @@ def suggest_control_mappings(
     session: Annotated[Session, Depends(get_session)],
     organization_id: Annotated[UUID, Depends(organization_header)],
     actor_id: Annotated[str, Depends(actor_header)],
+    _reviewer: ReviewerUser,
 ) -> MappingSuggestionResponse:
     with session.begin():
         records = suggest_mappings(

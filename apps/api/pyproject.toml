@@ -4,11 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "regimpact-api"
-version = "0.2.6"
+version = "0.3.0a4"
 description = "RegImpact AI API"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
+  "azure-identity>=1.25,<2",
+  "azure-storage-blob>=12.27,<13",
   "fastapi>=0.116,<1",
   "beautifulsoup4>=4.13,<5",
   "dramatiq[redis]>=2.0,<3",

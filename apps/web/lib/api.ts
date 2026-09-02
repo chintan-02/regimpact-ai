@@ -1,15 +1,14 @@
 import type { Change, ChangeDetail, Ingestion, Regulation, Source } from "./types";
+import { cookies } from "next/headers";
 
 export type ApiResult<T> = { data: T; error: null } | { data: null; error: string };
 
 const apiBase = process.env.REGIMPACT_API_BASE_URL ?? "http://localhost:8000";
-const organizationId =
-  process.env.REGIMPACT_ORGANIZATION_ID ?? "11111111-1111-4111-8111-111111111111";
-
 export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
   try {
+    const token = (await cookies()).get("regimpact_access_token")?.value;
     const response = await fetch(`${apiBase}${path}`, {
-      headers: { "X-Organization-ID": organizationId },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       cache: "no-store",
     });
     if (!response.ok) {

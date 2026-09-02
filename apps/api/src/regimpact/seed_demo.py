@@ -7,6 +7,8 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from .auth import VALID_ROLES, hash_password
+from .config import get_settings
 from .control_mapping import add_control, suggest_mappings
 from .database import SessionFactory
 from .db_models import (
@@ -15,6 +17,7 @@ from .db_models import (
     RegulationRecord,
     RegulationVersionRecord,
     RegulatorySourceRecord,
+    UserRecord,
 )
 from .domain import Section, content_hash, utc_now
 from .embeddings import FeatureHashEmbeddingProvider
@@ -32,6 +35,52 @@ SOURCE_PAGE = "https://www.aer.ca/regulations-and-compliance-enforcement/rules-a
 def seed() -> None:
     with SessionFactory() as session, session.begin():
         ensure_organization(session, ORGANIZATION_ID, "Northstar Energy")
+        settings = get_settings()
+        if settings.environment.lower() in {"production", "prod"}:
+            raise RuntimeError("The deterministic demo seed must not run in production.")
+        demo_users = (
+            (
+                settings.demo_admin_email,
+                "Northstar Administrator",
+                "admin",
+                settings.demo_admin_password,
+            ),
+            (
+                settings.demo_analyst_email,
+                "Reference Analyst",
+                "analyst",
+                settings.demo_analyst_password,
+            ),
+            (
+                settings.demo_viewer_email,
+                "Read-only Reviewer",
+                "viewer",
+                settings.demo_viewer_password,
+            ),
+        )
+        for email, display_name, role, password in demo_users:
+            if role not in VALID_ROLES:
+                raise RuntimeError(f"unsupported demo role: {role}")
+            user = session.scalar(
+                select(UserRecord).where(
+                    UserRecord.organization_id == ORGANIZATION_ID,
+                    UserRecord.email == email.lower(),
+                )
+            )
+            if user is None:
+                session.add(
+                    UserRecord(
+                        organization_id=ORGANIZATION_ID,
+                        email=email.lower(),
+                        display_name=display_name,
+                        role=role,
+                        password_hash=hash_password(password),
+                    )
+                )
+            else:
+                user.display_name = display_name
+                user.role = role
+                user.active = True
         regulation = session.scalar(
             select(RegulationRecord).where(RegulationRecord.id == REGULATION_ID)
         )

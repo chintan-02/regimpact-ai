@@ -6,11 +6,12 @@ import json
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .api import _obligation_response
+from .auth import Authenticated, ReviewerUser
 from .database import get_session
 from .db_models import (
     ControlRecord,
@@ -35,12 +36,12 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1", tags=["analyst-review"])
 
 
-def organization_header(x_organization_id: Annotated[UUID, Header()]) -> UUID:
-    return x_organization_id
+def organization_header(user: Authenticated) -> UUID:
+    return user.organization_id
 
 
-def actor_header(x_actor_id: Annotated[str, Header(min_length=1, max_length=200)]) -> str:
-    return x_actor_id
+def actor_header(user: Authenticated) -> str:
+    return user.actor_id
 
 
 def _decision_response(record):  # type: ignore[no-untyped-def]
@@ -236,6 +237,7 @@ def create_decision(
     session: Annotated[Session, Depends(get_session)],
     organization_id: Annotated[UUID, Depends(organization_header)],
     actor_id: Annotated[str, Depends(actor_header)],
+    _reviewer: ReviewerUser,
     mapping_id: UUID | None = None,
 ) -> MappingDecisionResponse:
     with session.begin():

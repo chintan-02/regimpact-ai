@@ -1,10 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function ReviewDecisionForm({ obligationId, mappingId, revision }: { obligationId: string; mappingId: string | null; revision: number }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [canReview, setCanReview] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((user: { role?: string } | null) =>
+        setCanReview(user?.role === "admin" || user?.role === "analyst"),
+      )
+      .catch(() => setCanReview(false));
+  }, []);
+
+  if (canReview === false) {
+    return <p className="readOnlyNotice">Viewer access is read-only. An analyst or administrator must record this decision.</p>;
+  }
 
   async function submit(formData: FormData) {
     setBusy(true);
@@ -32,7 +46,7 @@ export function ReviewDecisionForm({ obligationId, mappingId, revision }: { obli
         {!mappingId && <option value="confirmed_unmapped">Confirm unmapped</option>}
       </select></label>
       <label>Reviewer rationale<textarea name="rationale" minLength={3} maxLength={2000} required placeholder="Record the evidence-based reason for this disposition." /></label>
-      <button className="primary" disabled={busy}>{busy ? "Recording…" : "Record decision"}</button>
+      <button className="primary" disabled={busy || canReview === null}>{busy ? "Recording…" : "Record decision"}</button>
       {message && <p className="formStatus" role="status">{message}</p>}
     </form>
   );

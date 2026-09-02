@@ -6,6 +6,46 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=200)
+
+
+class AuthenticatedUserResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    organization_name: str
+    email: str
+    display_name: str
+    role: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: AuthenticatedUserResponse
+
+
+class UserCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    display_name: str = Field(min_length=2, max_length=200)
+    role: str = Field(pattern=r"^(admin|analyst|viewer)$")
+    password: str = Field(min_length=12, max_length=200)
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    organization_id: UUID
+    email: str
+    display_name: str
+    role: str
+    active: bool
+    created_at: datetime
+    last_login_at: datetime | None
+
+
 class OrganizationCreate(BaseModel):
     id: UUID
     name: str = Field(min_length=2, max_length=200)
@@ -78,6 +118,14 @@ class IngestionJobState(BaseModel):
     content_hash: str
     resulting_version_id: UUID | None
     error_code: str | None
+    error_message: str | None
+    attempt_count: int
+    max_attempts: int
+    failure_class: str | None
+    next_retry_at: datetime | None
+    lease_expires_at: datetime | None
+    last_heartbeat_at: datetime | None
+    replay_count: int
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None

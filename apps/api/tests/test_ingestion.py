@@ -1,10 +1,12 @@
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from reportlab.pdfgen.canvas import Canvas
 
+from regimpact.config import Settings
 from regimpact.ingestion import (
     DevelopmentAllowScanner,
     DocumentValidationError,
@@ -12,7 +14,7 @@ from regimpact.ingestion import (
     extract_document,
     validate_upload,
 )
-from regimpact.storage import LocalObjectStorage
+from regimpact.storage import AzureBlobObjectStorage, LocalObjectStorage, configured_object_storage
 
 
 class RejectScanner:
@@ -123,3 +125,30 @@ class LocalObjectStorageTests(TestCase):
                 filename="directive.pdf",
                 content=b"content",
             )
+
+    def test_storage_factory_preserves_local_default(self):
+        storage = configured_object_storage(Settings())
+        self.assertIsInstance(storage, LocalObjectStorage)
+
+    def test_azure_blob_uses_tenant_scoped_content_address(self):
+        container = MagicMock()
+        service = MagicMock()
+        service.get_container_client.return_value = container
+        with (
+            patch("azure.identity.DefaultAzureCredential"),
+            patch("azure.storage.blob.BlobServiceClient", return_value=service),
+        ):
+            storage = AzureBlobObjectStorage("https://example.blob.core.windows.net", "documents")
+        organization_id = uuid4()
+        uri = storage.put_document(
+            organization_id=organization_id,
+            object_key="b" * 64,
+            filename="directive.pdf",
+            content=b"content",
+        )
+        self.assertEqual(uri, f"azblob://documents/{organization_id}/{'b' * 64}.pdf")
+        container.upload_blob.assert_called_once_with(
+            name=f"{organization_id}/{'b' * 64}.pdf",
+            data=b"content",
+            overwrite=False,
+        )
