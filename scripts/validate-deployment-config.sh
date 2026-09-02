@@ -30,7 +30,7 @@ grep -q 'resourceGroups/${resource_group}' scripts/bootstrap-azure-oidc.sh
 grep -q 'Role Based Access Control Administrator' scripts/bootstrap-azure-oidc.sh
 
 if grep -q 'options: \[staging, production\]' .github/workflows/deploy-azure.yml; then
-  echo "Production deployment must remain disabled for v0.5 alpha" >&2
+  echo "Production deployment must remain disabled for v0.5.0" >&2
   exit 1
 fi
 

@@ -1,4 +1,4 @@
-# v0.5 alpha release audit
+# v0.5.0 release audit
 
 Scope: real Azure staging deployment validation, end-to-end readiness, controlled migrations,
 immutable deployment evidence, rollback tooling, observability wiring, and cost-aware operations.
@@ -13,7 +13,7 @@ quality checks, frontend lint/type/build checks, Docker regression testing, an a
 OIDC deployment, successful migration execution, healthy Container Apps, smoke tests, retained
 deployment evidence, and a reviewed rollback procedure.
 
-Production is not approved by this alpha. Private networking, enterprise malware scanning, Entra
+Production deployment is not approved by this release. Private networking, enterprise malware scanning, Entra
 workforce identity, restore drills, and Azure Managed Redis remain explicit production boundaries.
 
 ## Local verification
