@@ -17,6 +17,7 @@ from .controls_api import router as controls_router
 from .ingestion import MalwareScannerUnavailableError
 from .observability import (
     actor_id_context,
+    configure_cloud_telemetry,
     configure_logging,
     metrics,
     organization_id_context,
@@ -32,6 +33,7 @@ from .review_workflow import ReviewConflictError
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    configure_cloud_telemetry()
     logger = logging.getLogger("regimpact.http")
     app = FastAPI(
         title="RegImpact AI API",
