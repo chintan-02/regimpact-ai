@@ -24,16 +24,17 @@ export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
   }
 }
 
-export async function getChangeRegister() {
+export async function getChangeRegister(selectedChangeId?: string) {
   const [regulations, changes, sources, ingestions] = await Promise.all([
     apiGet<Regulation[]>("/api/v1/regulations"),
     apiGet<Change[]>("/api/v1/changes?latest_only=true&limit=100"),
     apiGet<Source[]>("/api/v1/sources"),
     apiGet<Ingestion[]>("/api/v1/ingestions?limit=100"),
   ]);
-  const firstChange = changes.data?.[0];
-  const selected = firstChange
-    ? await apiGet<ChangeDetail>(`/api/v1/changes/${firstChange.id}`)
+  const selectedChange =
+    changes.data?.find((change) => change.id === selectedChangeId) ?? changes.data?.[0];
+  const selected = selectedChange
+    ? await apiGet<ChangeDetail>(`/api/v1/changes/${selectedChange.id}`)
     : ({ data: null, error: null } satisfies ApiResult<ChangeDetail | null>);
   return { regulations, changes, sources, ingestions, selected };
 }

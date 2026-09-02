@@ -13,8 +13,13 @@ function shortDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-export default async function Home() {
-  const { regulations, changes, sources, ingestions, selected } = await getChangeRegister();
+type HomeProps = {
+  searchParams: Promise<{ change?: string }>;
+};
+
+export default async function Home({ searchParams }: HomeProps) {
+  const { change: selectedChangeId } = await searchParams;
+  const { regulations, changes, sources, ingestions, selected } = await getChangeRegister(selectedChangeId);
   const error = regulations.error ?? changes.error ?? sources.error ?? ingestions.error;
   const completed = ingestions.data?.filter((job) => job.status === "completed").length ?? 0;
   const attention =
@@ -51,20 +56,28 @@ export default async function Home() {
         <section className="workspace">
           <div className="register">
             <div className="sectionHead">
-              <div><p className="eyebrow">LATEST VERSION COMPARISONS</p><h2>{regulations.data?.length ?? 0} monitored {(regulations.data?.length ?? 0) === 1 ? "regulation" : "regulations"}</h2></div>
+              <div>
+                <p className="eyebrow">LATEST REGULATORY CHANGES</p>
+                <h2>{regulations.data?.length ?? 0} monitored {(regulations.data?.length ?? 0) === 1 ? "regulation" : "regulations"}</h2>
+                <p className="sectionHint">Select a change to preview its impact.</p>
+              </div>
               <span className="version">{changes.data.length} changes</span>
             </div>
             <div className="filters" aria-label="Change type legend"><span className="legend added">Added</span><span className="legend modified">Modified</span><span className="legend removed">Removed</span></div>
             <table>
               <thead><tr><th>SECTION</th><th>REGULATION</th><th>CHANGE</th><th>DETECTED</th></tr></thead>
-              <tbody>{changes.data.map((change, index) => (
-                <tr key={change.id} className={index === 0 ? "current" : ""}>
-                  <td><span className="sectionNo">§ {change.section_key}</span><Link href={`/changes/${change.id}`}><b>{change.heading}</b></Link></td>
-                  <td>{change.source_key}<small className="tableSub">{change.jurisdiction}</small></td>
-                  <td><span className={`change ${change.change_type}`}>{change.change_type}</span><small className="tableSub">v{change.previous_version_ordinal ?? "—"} → v{change.current_version_ordinal}</small></td>
-                  <td>{shortDate(change.detected_at)}</td>
+              <tbody>{changes.data.map((change) => {
+                const isSelected = change.id === selected.data?.id;
+                const previewHref = `/?change=${encodeURIComponent(change.id)}`;
+                return (
+                <tr key={change.id} className={isSelected ? "current" : ""}>
+                  <td><Link className="rowSelect" href={previewHref} aria-current={isSelected ? "true" : undefined}><span className="sectionNo">§ {change.section_key}</span><span className="changeHeading"><b>{change.heading}</b>{isSelected && <small className="selectedMarker">Selected</small>}</span></Link></td>
+                  <td><Link className="rowSelect" href={previewHref}>{change.source_key}<small className="tableSub">{change.jurisdiction}</small></Link></td>
+                  <td><Link className="rowSelect" href={previewHref}><span className={`change ${change.change_type}`}>{change.change_type}</span><small className="tableSub">v{change.previous_version_ordinal ?? "—"} → v{change.current_version_ordinal}</small></Link></td>
+                  <td><Link className="rowSelect" href={previewHref}>{shortDate(change.detected_at)}</Link></td>
                 </tr>
-              ))}</tbody>
+                );
+              })}</tbody>
             </table>
           </div>
 
