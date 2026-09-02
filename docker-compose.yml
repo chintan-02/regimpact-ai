@@ -36,6 +36,7 @@ services:
       REGIMPACT_JWT_SECRET: local-compose-secret-change-before-production-2026
       REGIMPACT_LOG_LEVEL: INFO
       REGIMPACT_METRICS_ENABLED: "true"
+      REGIMPACT_DEMO_MODE: "true"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=2)"]
       interval: 10s
@@ -59,6 +60,8 @@ services:
     environment:
       REGIMPACT_API_BASE_URL: http://api:8000
       REGIMPACT_COOKIE_SECURE: "false"
+      REGIMPACT_ENVIRONMENT: local
+      REGIMPACT_DEMO_MODE: "true"
     ports:
       - "3000:3000"
     depends_on:

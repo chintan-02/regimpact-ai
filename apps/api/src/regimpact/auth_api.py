@@ -7,11 +7,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .auth import AdminUser, Authenticated, hash_password, issue_access_token, verify_password
+from .config import get_settings
 from .database import get_session
 from .db_models import AuditEventRecord, OrganizationRecord, UserRecord
 from .domain import utc_now
 from .schemas import (
     AuthenticatedUserResponse,
+    DemoLoginRequest,
     LoginRequest,
     TokenResponse,
     UserCreate,
@@ -32,14 +34,13 @@ def _response(user: UserRecord, organization: OrganizationRecord) -> Authenticat
     )
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, session: Annotated[Session, Depends(get_session)]) -> TokenResponse:
+def _login(email: str, password: str, session: Session, *, mode: str) -> TokenResponse:
     row = session.execute(
         select(UserRecord, OrganizationRecord)
         .join(OrganizationRecord, OrganizationRecord.id == UserRecord.organization_id)
-        .where(func.lower(UserRecord.email) == body.email.strip().lower())
+        .where(func.lower(UserRecord.email) == email.strip().lower())
     ).one_or_none()
-    if row is None or not row[0].active or not verify_password(body.password, row[0].password_hash):
+    if row is None or not row[0].active or not verify_password(password, row[0].password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -53,7 +54,7 @@ def login(body: LoginRequest, session: Annotated[Session, Depends(get_session)])
             event_type="authentication.login_succeeded",
             entity_type="user",
             entity_id=user.id,
-            detail_json="{}",
+            detail_json=f'{{"mode":"{mode}"}}',
         )
     )
     session.commit()
@@ -63,6 +64,27 @@ def login(body: LoginRequest, session: Annotated[Session, Depends(get_session)])
         expires_in=expires_in,
         user=_response(user, organization),
     )
+
+
+@router.post("/login", response_model=TokenResponse)
+def login(body: LoginRequest, session: Annotated[Session, Depends(get_session)]) -> TokenResponse:
+    return _login(body.email, body.password, session, mode="credentials")
+
+
+@router.post("/demo-login", response_model=TokenResponse)
+def demo_login(
+    body: DemoLoginRequest, session: Annotated[Session, Depends(get_session)]
+) -> TokenResponse:
+    settings = get_settings()
+    if not settings.demo_mode or settings.environment.lower() in {"production", "prod"}:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+    credentials = {
+        "admin": (settings.demo_admin_email, settings.demo_admin_password),
+        "analyst": (settings.demo_analyst_email, settings.demo_analyst_password),
+        "viewer": (settings.demo_viewer_email, settings.demo_viewer_password),
+    }
+    email, password = credentials[body.role]
+    return _login(email, password, session, mode="demo_role_selector")
 
 
 @router.get("/me", response_model=AuthenticatedUserResponse)

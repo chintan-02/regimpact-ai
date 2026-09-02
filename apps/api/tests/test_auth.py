@@ -29,9 +29,7 @@ class AuthenticationTests(TestCase):
         self.organization_id = uuid4()
         self.user_id = uuid4()
         with self.session.begin():
-            self.session.add(
-                OrganizationRecord(id=self.organization_id, name="Northstar Energy")
-            )
+            self.session.add(OrganizationRecord(id=self.organization_id, name="Northstar Energy"))
             self.session.add(
                 UserRecord(
                     id=self.user_id,
@@ -91,9 +89,55 @@ class AuthenticationTests(TestCase):
             )
         )
         self.assertEqual(response.status_code, 401)
-        self.assertEqual(
-            self.session.scalar(select(func.count()).select_from(AuditEventRecord)), 0
+        self.assertEqual(self.session.scalar(select(func.count()).select_from(AuditEventRecord)), 0)
+
+    def test_demo_login_is_hidden_by_default(self) -> None:
+        response = asyncio.run(
+            self.request("POST", "/api/v1/auth/demo-login", json={"role": "analyst"})
         )
+        self.assertEqual(response.status_code, 404)
+
+    def test_demo_login_uses_real_user_and_is_audited(self) -> None:
+        self.user.email = "analyst@northstar.local"
+        self.user.password_hash = hash_password("ChangeMe-Analyst-2026!")
+        self.session.commit()
+        with patch.dict(
+            os.environ,
+            {"REGIMPACT_DEMO_MODE": "true", "REGIMPACT_ENVIRONMENT": "local"},
+        ):
+            get_settings.cache_clear()
+            try:
+                response = asyncio.run(
+                    self.request("POST", "/api/v1/auth/demo-login", json={"role": "analyst"})
+                )
+            finally:
+                get_settings.cache_clear()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user"]["id"], str(self.user_id))
+        event = self.session.scalar(
+            select(AuditEventRecord).where(
+                AuditEventRecord.event_type == "authentication.login_succeeded"
+            )
+        )
+        self.assertIsNotNone(event)
+        assert event is not None
+        self.assertIn("demo_role_selector", event.detail_json)
+
+    def test_production_rejects_demo_mode_configuration(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "REGIMPACT_DEMO_MODE": "true",
+                "REGIMPACT_ENVIRONMENT": "production",
+                "REGIMPACT_JWT_SECRET": "a-production-secret-that-is-long-enough-2026",
+            },
+        ):
+            get_settings.cache_clear()
+            try:
+                with self.assertRaisesRegex(ValueError, "must be disabled in production"):
+                    get_settings()
+            finally:
+                get_settings.cache_clear()
 
     def test_viewer_cannot_create_controls(self) -> None:
         self.app.dependency_overrides[get_current_user] = lambda: CurrentUser(

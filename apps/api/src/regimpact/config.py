@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     auth_mode: str = "jwt"
     jwt_secret: str = "local-development-secret-change-before-production"
     access_token_minutes: int = Field(default=30, ge=5, le=1_440)
+    demo_mode: bool = False
     demo_admin_email: str = "admin@northstar.local"
     demo_admin_password: str = "ChangeMe-Admin-2026!"
     demo_analyst_email: str = "analyst@northstar.local"
@@ -51,6 +52,8 @@ class Settings(BaseSettings):
         if self.object_storage_backend == "azure_blob" and not self.azure_storage_account_url:
             raise ValueError("azure_blob storage requires REGIMPACT_AZURE_STORAGE_ACCOUNT_URL")
         if self.environment.lower() in {"production", "prod"}:
+            if self.demo_mode:
+                raise ValueError("REGIMPACT_DEMO_MODE must be disabled in production")
             if self.auth_mode != "jwt":
                 raise ValueError("production requires JWT authentication")
             if self.jwt_secret == "local-development-secret-change-before-production":

@@ -11,6 +11,10 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
+class DemoLoginRequest(BaseModel):
+    role: str = Field(pattern=r"^(admin|analyst|viewer)$")
+
+
 class AuthenticatedUserResponse(BaseModel):
     id: UUID
     organization_id: UUID
