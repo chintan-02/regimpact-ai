@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from .agent_workflow import create_workflow
 from .auth import VALID_ROLES, hash_password
 from .config import get_settings
 from .control_mapping import add_control, suggest_mappings
@@ -263,6 +264,32 @@ def seed() -> None:
                 idempotency_key=f"reference-{decision}-{mapping.id}",
                 expected_revision=0,
             )
+
+        analyst = session.scalar(
+            select(UserRecord).where(
+                UserRecord.organization_id == ORGANIZATION_ID,
+                UserRecord.email == settings.demo_analyst_email.lower(),
+            )
+        )
+        sample_obligation = session.scalar(
+            select(ObligationRecord)
+            .where(
+                ObligationRecord.organization_id == ORGANIZATION_ID,
+                ObligationRecord.version_id == second_version.id,
+            )
+            .order_by(ObligationRecord.created_at)
+            .limit(1)
+        )
+        if analyst is None or sample_obligation is None:
+            raise RuntimeError("demo agent workflow prerequisites could not be resolved")
+        create_workflow(
+            session,
+            organization_id=ORGANIZATION_ID,
+            obligation_id=sample_obligation.id,
+            goal="Assess downstream control impact using authoritative evidence.",
+            actor_id=f"user:{analyst.id}",
+            idempotency_key="reference-controlled-impact-v1",
+        )
 
         source = session.scalar(
             select(RegulatorySourceRecord).where(

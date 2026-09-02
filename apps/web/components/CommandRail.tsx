@@ -17,6 +17,7 @@ const navigation = [
   ["/controls", "Controls"],
   ["/sources", "Sources"],
   ["/ingestions", "Ingestion"],
+  ["/workflows", "Impact workflows"],
 ];
 
 export function CommandRail() {

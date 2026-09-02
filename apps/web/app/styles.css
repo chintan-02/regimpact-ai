@@ -161,10 +161,19 @@ input, select, textarea { border: 1px solid #aaa396; background: white; color: v
 .operationsGrid dd { margin: 8px 0; font-family: Georgia, serif; font-size: 24px; font-weight: 700; }
 .operationsGrid p, .snapshotTime { color: var(--muted); line-height: 1.5; }
 .snapshotTime { margin: 18px 0 0; font-size: 12px; }
+.agentComposer { margin: 28px 56px; padding: 28px; display: grid; grid-template-columns: .7fr 1.3fr; gap: 32px; background: var(--surface); border: 1px solid var(--rule); border-top: 4px solid var(--cobalt); border-radius: var(--radius); }
+.agentComposer h2 { margin: 5px 0; font-size: 28px; }.agentComposer p:not(.eyebrow) { color: var(--muted); line-height: 1.5; }
+.agentStartForm { display: grid; gap: 12px; }.agentStartForm label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .05em; }.agentStartForm textarea { min-height: 76px; }
+.agentWorkflowGrid { display: grid; gap: 20px; margin: 28px 56px 56px; }
+.agentWorkflowCard { background: var(--surface); border: 1px solid var(--rule); border-top: 4px solid var(--amber); border-radius: var(--radius); overflow: hidden; }
+.agentWorkflowCard > header { padding: 14px 22px; display: flex; justify-content: space-between; gap: 16px; align-items: center; border-bottom: 1px solid var(--rule); }.agentWorkflowCard > header > div { display: flex; gap: 10px; align-items: center; }.riskLabel { color: var(--muted); font-size: 12px; text-transform: uppercase; }.agentWorkflowBody { padding: 26px; }.agentWorkflowBody h2 { margin: 6px 0 18px; }.agentWorkflowBody h3 { margin-top: 24px; }.agentWorkflowBody blockquote { max-width: none; padding: 18px; background: #ede9df; border-left: 3px solid var(--cobalt); }.citation { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }.citation a { color: inherit; }.agentWorkflowBody li { margin: 8px 0; }
+.policyGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 22px 0 10px; }.policyGrid span { padding: 9px; font-size: 10px; font-weight: 800; text-transform: uppercase; border: 1px solid var(--rule); }.policyGrid .pass { color: #176244; background: #e8f4ee; }.policyGrid .stop { color: #8c2e25; background: #f9e9e6; }.evaluationScore { color: var(--muted); font-size: 12px; }
+.state.awaiting_approval, .state.changes_requested, .state.blocked { color: #7a4813; border-color: #d9b17b; background: #fff3df; }.state.approved { color: #176244; border-color: #8bc4ad; background: #e8f4ee; }
 @keyframes pulse { to { background-position: -200% 0; } }
 @media (max-width: 900px) { .commandRail { grid-template-columns: 1fr auto; padding: 0 20px; } nav { display: none; } .masthead { padding: 36px 24px 24px; } .signalStrip { margin: 0 24px; grid-template-columns: 1fr 1fr; } .workspace { grid-template-columns: 1fr; padding: 24px; } }
 @media (max-width: 1100px) { .controlGrid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 900px) { .statusMessage, .dataSheet, .diffMeta, .impactPanel, .workflowFilters { margin-left: 24px; margin-right: 24px; } .diffWorkspace, .detailWorkspace { grid-template-columns: 1fr; padding: 24px; } .controlGrid { margin-left: 24px; margin-right: 24px; grid-template-columns: 1fr; } }
-@media (max-width: 700px) { .operationsGrid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .agentComposer { margin-left: 24px; margin-right: 24px; grid-template-columns: 1fr; }.agentWorkflowGrid { margin-left: 24px; margin-right: 24px; }.policyGrid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) { .operationsGrid, .policyGrid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { h1 { font-size: 40px; } .masthead { align-items: flex-start; gap: 24px; flex-direction: column; } .signalStrip { grid-template-columns: 1fr; } .signalStrip > div { border-right: 0; border-bottom: 1px solid var(--rule); } .register { overflow-x: auto; } table { min-width: 720px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }

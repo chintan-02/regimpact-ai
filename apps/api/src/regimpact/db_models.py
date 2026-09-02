@@ -189,8 +189,12 @@ class IngestionJobRecord(Base):
     failure_class: Mapped[str | None] = mapped_column(String(30), nullable=True)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lease_token: Mapped[UUID | None] = mapped_column(SAUuid, nullable=True)
-    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     replay_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -210,7 +214,9 @@ class OutboxEventRecord(Base):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    dead_lettered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -434,5 +440,62 @@ class MappingDecisionRecord(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     supersedes_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("mapping_decisions.id", ondelete="RESTRICT"), nullable=True
+    )
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AgentWorkflowRunRecord(Base):
+    """Immutable proposal inputs plus controlled workflow state."""
+
+    __tablename__ = "agent_workflow_runs"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "idempotency_key", name="uq_agent_run_org_key"),
+        Index("ix_agent_run_org_status", "organization_id", "status", "created_at"),
+    )
+    id: Mapped[UUID] = mapped_column(SAUuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    obligation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("obligations.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    plan_json: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_json: Mapped[str] = mapped_column(Text, nullable=False)
+    proposal_json: Mapped[str] = mapped_column(Text, nullable=False)
+    policy_results_json: Mapped[str] = mapped_column(Text, nullable=False)
+    agent_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    evaluation_score: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AgentWorkflowDecisionRecord(Base):
+    """Append-only human decisions; agent proposals are never rewritten."""
+
+    __tablename__ = "agent_workflow_decisions"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "idempotency_key", name="uq_agent_decision_org_key"),
+        UniqueConstraint("workflow_run_id", "revision", name="uq_agent_decision_revision"),
+        Index("ix_agent_decision_org_created", "organization_id", "decided_at"),
+    )
+    id: Mapped[UUID] = mapped_column(SAUuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    workflow_run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("agent_workflow_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(30), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    supersedes_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("agent_workflow_decisions.id", ondelete="RESTRICT"), nullable=True
     )
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
