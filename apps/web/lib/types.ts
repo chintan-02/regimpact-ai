@@ -163,3 +163,47 @@ export type OperationalSnapshot = {
   outbox_pending: number;
   outbox_dead_letter: number;
 };
+
+export type AgentWorkflowDecision = {
+  id: string;
+  decision: "approved" | "rejected" | "changes_requested";
+  rationale: string;
+  actor_id: string;
+  revision: number;
+  decided_at: string;
+};
+
+export type AgentWorkflow = {
+  id: string;
+  obligation_id: string;
+  status: "awaiting_approval" | "blocked" | "approved" | "rejected" | "changes_requested";
+  risk_level: "medium" | "high";
+  goal: string;
+  plan: { steps: string[] };
+  evidence: {
+    section_key: string;
+    page: number | null;
+    source_uri: string;
+    quote: string;
+    content_hash: string;
+    version_ordinal: number;
+  };
+  proposal: {
+    summary: string;
+    recommended_actions: Array<{
+      action: string;
+      control_key: string;
+      owner: string;
+      requires_human_approval: boolean;
+    }>;
+    limitations: string[];
+  };
+  policy_results: Record<string, boolean>;
+  agent_version: string;
+  evaluation_score: number;
+  created_by: string;
+  created_at: string;
+  decided_at: string | null;
+  revision: number;
+  latest_decision: AgentWorkflowDecision | null;
+};

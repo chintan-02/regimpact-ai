@@ -18,6 +18,7 @@ This is not a regulatory chatbot and it does not provide legal advice. It is an 
 | v0.3B | Structured logging, metrics, tracing and operational dashboards |
 | v0.3C | Azure deployment, CI/CD, secrets and infrastructure as code |
 | v0.3D | Reliable ingestion retries, dead letters and monitoring |
+| v0.4 | Controlled agentic impact workflows, evaluation, safety gates and human approval |
 | v0.4 | Controlled agentic workflow, evaluation and human approval |
 | v1.0 | AKS, Helm, autoscaling, rollback and recovery testing |
 
@@ -30,7 +31,12 @@ docs/              Architecture, product and design decisions
 infra/             Cloud infrastructure (introduced in v0.5)
 ```
 
-## Current milestone: v0.3C Azure deployment and delivery
+## Current milestone: v0.4 controlled agentic workflows
+
+v0.4 introduces bounded regulatory-impact assessments. The agent collects versioned evidence,
+proposes control impacts, and evaluates deterministic policy gates. It cannot execute downstream
+changes. An authenticated administrator must approve, reject, or request changes, and every
+decision is append-only and tenant scoped.
 
 - Azure Container Apps deployment architecture expressed in Bicep
 - Managed PostgreSQL, Redis, Blob Storage, ACR, Key Vault and Application Insights

@@ -363,3 +363,48 @@ class ReviewQueueResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AgentWorkflowCreate(BaseModel):
+    obligation_id: UUID
+    goal: str = Field(min_length=10, max_length=1_000)
+    idempotency_key: str = Field(min_length=8, max_length=120)
+
+
+class AgentWorkflowDecisionCreate(BaseModel):
+    decision: str = Field(pattern=r"^(approved|rejected|changes_requested)$")
+    rationale: str = Field(min_length=10, max_length=2_000)
+    idempotency_key: str = Field(min_length=8, max_length=120)
+    expected_revision: int = Field(ge=0)
+
+
+class AgentWorkflowDecisionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    workflow_run_id: UUID
+    decision: str
+    rationale: str
+    actor_id: str
+    revision: int
+    supersedes_id: UUID | None
+    decided_at: datetime
+
+
+class AgentWorkflowResponse(BaseModel):
+    id: UUID
+    obligation_id: UUID
+    status: str
+    risk_level: str
+    goal: str
+    plan: dict[str, object]
+    evidence: dict[str, object]
+    proposal: dict[str, object]
+    policy_results: dict[str, bool]
+    agent_version: str
+    evaluation_score: float
+    created_by: str
+    created_at: datetime
+    decided_at: datetime | None
+    revision: int
+    latest_decision: AgentWorkflowDecisionResponse | None
+    created: bool = True

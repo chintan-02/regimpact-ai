@@ -59,7 +59,13 @@ def create_app() -> FastAPI:
             duration = metrics.finish(request.method, route, 500, started)
             logger.exception(
                 "request failed",
-                extra={"event": "http_request", "method": request.method, "route": route, "status_code": 500, "duration_ms": round(duration * 1000, 2)},
+                extra={
+                    "event": "http_request",
+                    "method": request.method,
+                    "route": route,
+                    "status_code": 500,
+                    "duration_ms": round(duration * 1000, 2),
+                },
             )
             raise
         route = getattr(request.scope.get("route"), "path", "unmatched")
@@ -70,7 +76,13 @@ def create_app() -> FastAPI:
         response.headers["X-Response-Time-Ms"] = f"{duration * 1000:.2f}"
         logger.info(
             "request completed",
-            extra={"event": "http_request", "method": request.method, "route": route, "status_code": response.status_code, "duration_ms": round(duration * 1000, 2)},
+            extra={
+                "event": "http_request",
+                "method": request.method,
+                "route": route,
+                "status_code": response.status_code,
+                "duration_ms": round(duration * 1000, 2),
+            },
         )
         request_id_context.reset(tokens[0])
         trace_id_context.reset(tokens[1])
@@ -195,7 +207,12 @@ def create_app() -> FastAPI:
         ready_status = all(value["status"] == "ok" for value in checks.values())
         return JSONResponse(
             status_code=200 if ready_status else 503,
-            content={"status": "ready" if ready_status else "not_ready", "service": "regimpact-api", "version": __version__, "checks": checks},
+            content={
+                "status": "ready" if ready_status else "not_ready",
+                "service": "regimpact-api",
+                "version": __version__,
+                "checks": checks,
+            },
         )
 
     @app.get("/metrics", tags=["operations"], include_in_schema=False)
@@ -208,11 +225,13 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
     app.include_router(controls_router)
+    from .agent_api import router as agent_router
     from .auth_api import router as auth_router
     from .operations_api import router as operations_router
     from .review_api import router as review_router
 
     app.include_router(auth_router)
+    app.include_router(agent_router)
     app.include_router(review_router)
     app.include_router(operations_router)
 
