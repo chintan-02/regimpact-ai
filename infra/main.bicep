@@ -26,7 +26,10 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${baseName}-logs'
   location: location
   tags: resourceTags
-  properties: { retentionInDays: environmentName == 'production' ? 30 : 14 }
+  properties: {
+    retentionInDays: 30
+    sku: { name: 'PerGB2018' }
+  }
 }
 
 resource insights 'Microsoft.Insights/components@2020-02-02' = {
@@ -89,7 +92,7 @@ resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   properties: {
     tenantId: tenant().tenantId
     enableRbacAuthorization: true
-    enablePurgeProtection: environmentName == 'production'
+    enablePurgeProtection: environmentName == 'production' ? true : null
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
     sku: { family: 'A', name: 'standard' }
