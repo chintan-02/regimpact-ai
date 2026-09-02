@@ -23,7 +23,26 @@ workforce identity, restore drills, and Azure Managed Redis remain explicit prod
 - mypy: passed for 40 source files.
 - Web ESLint, TypeScript, and optimized Next.js build: passed.
 - Shell syntax and deployment-policy checks: passed.
-- Bicep compilation and Docker regression: delegated to CI because this review environment does
-  not provide Azure CLI/Bicep or Docker.
-- Authenticated staging deployment and operational evidence: required before this alpha can be
-  accepted or finalized.
+- Bicep compilation, infrastructure validation, PostgreSQL integration, API tests, and web build: passed in GitHub Actions.
+- Authenticated Azure staging deployment, migrations, health verification, and evidence capture: passed.
+
+## Azure staging verification
+
+- Deployment workflow: `deploy-azure`
+- Successful run: `33692643667`
+- Deployment commit: `f87dae132cba5260045d04a8d603a350ff0d5883`
+- Environment: protected GitHub `staging` environment with OIDC authentication
+- Resource group: `rg-regimpact-staging`
+- Azure region: `canadacentral`
+- Promotion deployment: `promotion-33692643667`
+- Migration job: `regimpact-staging-migrate` — succeeded
+- Container Apps: API, web, worker, dispatcher, and scheduler — provisioning and latest revisions succeeded
+- Public readiness: returned `{"status":"ready","version":"0.5.0a1"}`
+- Protected operations route: redirected to `/login`
+- Evidence timestamp: `2026-09-02T23:06:45Z`
+- GitHub artifact: `deployment-evidence-f87dae132cba5260045d04a8d603a350ff0d5883`
+- Local evidence copy: `regimpact-deployment-evidence-33692643667`
+- Monthly staging budget: CA$20 with alerts
+- Actual Azure cost: pending Cost Management ingestion at audit time
+
+The deployment exposed and resolved Azure-specific compatibility issues involving OIDC subject matching, Log Analytics retention, Key Vault purge-protection semantics, OIDC token refresh, PostgreSQL pgvector allow-listing, and two-phase PostgreSQL configuration updates.
