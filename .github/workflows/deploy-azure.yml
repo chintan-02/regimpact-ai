@@ -7,7 +7,7 @@ on:
         description: Deployment environment
         required: true
         type: choice
-        options: [staging, production]
+        options: [staging]
 
 permissions:
   contents: read
@@ -38,6 +38,11 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Prepare Azure CLI and validate deployment policy
+        run: |
+          az extension add --name containerapp --upgrade --yes
+          ./scripts/validate-deployment-config.sh
+
       - name: Create resource group
         run: az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --tags application=regimpact-ai environment="${{ inputs.environment }}" managedBy=bicep
 
@@ -50,6 +55,17 @@ jobs:
           deployWorkloads=false
           postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}"
           jwtSecret="${{ secrets.REGIMPACT_JWT_SECRET }}"
+
+      - name: Review infrastructure changes
+        run: >-
+          az deployment group what-if
+          --resource-group "$RESOURCE_GROUP"
+          --template-file infra/main.bicep
+          --parameters "$PARAM_FILE"
+          deployWorkloads=false
+          postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}"
+          jwtSecret="${{ secrets.REGIMPACT_JWT_SECRET }}"
+          --no-pretty-print
 
       - name: Provision platform dependencies
         id: foundation
@@ -126,12 +142,25 @@ jobs:
               jwtSecret="${{ secrets.REGIMPACT_JWT_SECRET }}"
 
       - name: Verify deployed health
-        run: |
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error "${{ steps.application.outputs.web_url }}/login" > /dev/null; then exit 0; fi
-            sleep 10
-          done
-          exit 1
+        env:
+          WEB_URL: ${{ steps.application.outputs.web_url }}
+          EXPECTED_VERSION: 0.5.0a1
+        run: ./scripts/smoke-test-azure.sh
+
+      - name: Capture operational deployment evidence
+        if: inputs.environment == 'staging'
+        env:
+          EXPECTED_VERSION: 0.5.0a1
+        run: ./scripts/validate-azure-staging.sh
+
+      - name: Upload deployment evidence
+        if: inputs.environment == 'staging'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-evidence-${{ github.sha }}
+          path: deployment-evidence.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Publish deployment summary
         run: |

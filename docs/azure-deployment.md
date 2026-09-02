@@ -1,6 +1,6 @@
 # Azure deployment and CI/CD
 
-RegImpact AI v0.3C targets Azure Container Apps in `canadacentral`. Bicep is the source of truth
+RegImpact AI v0.5 targets Azure Container Apps in `canadacentral`. Bicep is the source of truth
 for staging and production; GitHub Actions builds immutable images and authenticates with workload
 identity federation rather than a client secret.
 
@@ -21,8 +21,7 @@ server-side API calls inside the Container Apps environment.
 
 ## GitHub environment configuration
 
-Create protected GitHub environments named `staging` and `production`. Require manual approval for
-production. Add these environment variables:
+Create a protected GitHub environment named `staging`. Add these environment variables:
 
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
@@ -34,17 +33,23 @@ Add these environment secrets:
 - `REGIMPACT_JWT_SECRET` (at least 32 random characters)
 
 Run `scripts/bootstrap-azure-oidc.sh` once from an authenticated administrative workstation to
-create the federated credentials. Review the subscription-scoped Contributor assignment and reduce
-it to organization-approved custom roles before a real production launch.
+create the staging resource group and federated credential. The deployer receives Contributor and
+Role Based Access Control Administrator only on `rg-regimpact-staging`; it receives no
+subscription-wide deployment role. Review both assignments against organization policy before use.
 
 ## Deployment sequence
 
-The manually dispatched workflow validates Bicep, provisions foundation resources, builds and
-pushes SHA-tagged images, deploys workloads, runs Alembic as a one-shot job, waits for completion,
-and verifies the public login page. Concurrency controls serialize deployments per environment.
+The manually dispatched workflow validates Bicep, reviews the Azure what-if result, provisions
+foundation resources, builds and pushes SHA-tagged images, deploys workloads at zero replicas,
+runs Alembic as a one-shot job, promotes the migrated workloads, and verifies the complete public
+web to internal API to PostgreSQL/Redis readiness path. Concurrency controls serialize deployments
+per environment. A JSON evidence artifact records the successful deployment and tested version.
 
 No deployment occurs from pull requests. CI compiles Bicep and runs the existing backend,
 PostgreSQL, frontend, lint, type, and test gates first.
+
+The v0.5 workflow intentionally exposes only `staging`. Production deployment remains disabled
+until the staging evidence is accepted and the production boundary below is resolved.
 
 ## Known production boundary
 
@@ -61,6 +66,21 @@ Staging uses burstable PostgreSQL, Basic Redis, Basic ACR, locally redundant Blo
 maximum of two API/worker replicas. Production increases database availability, backup retention,
 storage redundancy, and application scale. Always run `az deployment group what-if` and review the
 Azure pricing estimate before deploying.
+
+Azure Cache for Redis is on Microsoft's retirement path. The Basic instance remains in this
+portfolio staging topology temporarily because it is the lower-cost validation option. A real
+long-lived environment must plan migration to Azure Managed Redis before the applicable retirement
+deadline; do not create a new production dependency on the retiring service.
+
+## Operational validation and rollback
+
+After a staging deployment, run `scripts/validate-azure-staging.sh`. It verifies the provisioning
+state of all five Container Apps, exercises the public readiness proxy, confirms the deployed API
+version, and proves demo access is disabled. Preserve `deployment-evidence.json` with the release.
+
+Rollback uses immutable Git SHA image tags. Set `REGISTRY_NAME`, `KNOWN_GOOD_TAG`, and
+`CONFIRM_ROLLBACK=staging`, then run `scripts/rollback-azure-staging.sh`. Database downgrades are not
+automatic: only roll application images back when the corresponding schema is backward compatible.
 
 For local compilation only, export non-production placeholder values before compiling parameter
 files. Compilation does not contact Azure or store these values in the generated template:

@@ -15,7 +15,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: azure/setup-azd@v2
       - name: Compile Bicep templates
-        run: az bicep build --file infra/main.bicep
+        env:
+          POSTGRES_ADMIN_PASSWORD: CompileOnly-NotForDeployment-2026!
+          REGIMPACT_JWT_SECRET: compile-only-placeholder-at-least-32-characters
+        run: |
+          az bicep build --file infra/main.bicep --outfile /tmp/regimpact-main.json
+          az bicep build-params --file infra/staging.bicepparam --outfile /tmp/regimpact-staging.json
+          az bicep build-params --file infra/production.bicepparam --outfile /tmp/regimpact-production.json
+          ./scripts/validate-deployment-config.sh
       - name: Reject generated secrets and local environment files
         run: |
           test ! -f .env

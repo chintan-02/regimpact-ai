@@ -20,6 +20,7 @@ This is not a regulatory chatbot and it does not provide legal advice. It is an 
 | v0.3D | Reliable ingestion retries, dead letters and monitoring |
 | v0.4 | Controlled agentic impact workflows, evaluation, safety gates and human approval |
 | v0.4.1 | Responsive navigation and production-safe demo account selection |
+| v0.5.0 | Azure staging deployment validation and operational hardening |
 | v0.4 | Controlled agentic workflow, evaluation and human approval |
 | v1.0 | AKS, Helm, autoscaling, rollback and recovery testing |
 

@@ -224,6 +224,7 @@ var commonEnv = [
   { name: 'REGIMPACT_AZURE_STORAGE_CONTAINER', value: documents.name }
   { name: 'REGIMPACT_MALWARE_SCANNER_MODE', value: 'unavailable' }
   { name: 'REGIMPACT_LOG_LEVEL', value: 'INFO' }
+  { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
 ]
 
 resource api 'Microsoft.App/containerApps@2024-03-01' = if (deployWorkloads) {
@@ -276,8 +277,14 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = if (deployWorkloads) {
         env: [
           { name: 'REGIMPACT_API_BASE_URL', value: 'https://${api!.properties.configuration.ingress.fqdn}' }
           { name: 'REGIMPACT_COOKIE_SECURE', value: 'true' }
+          { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
         ]
         resources: { cpu: json('0.5'), memory: '1Gi' }
+        probes: [
+          { type: 'Liveness', httpGet: { path: '/login', port: 3000 }, periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 3 }
+          { type: 'Readiness', httpGet: { path: '/api/platform/readiness', port: 3000 }, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 6 }
+          { type: 'Startup', httpGet: { path: '/login', port: 3000 }, periodSeconds: 5, timeoutSeconds: 5, failureThreshold: 12 }
+        ]
       }]
       scale: { minReplicas: applicationMinReplicas, maxReplicas: environmentName == 'production' ? 5 : 2 }
     }
@@ -396,3 +403,9 @@ output apiUrl string = deployWorkloads ? 'https://${api!.properties.configuratio
 output webUrl string = deployWorkloads ? 'https://${web!.properties.configuration.ingress.fqdn}' : ''
 output migrationJobName string = deployWorkloads ? migrationJob!.name : ''
 output keyVaultName string = vault.name
+output logAnalyticsWorkspaceId string = logs.id
+output applicationInsightsName string = insights.name
+output postgresServerName string = postgres.name
+output redisName string = redis.name
+output storageAccountName string = storage.name
+output workloadIdentityName string = identity.name
