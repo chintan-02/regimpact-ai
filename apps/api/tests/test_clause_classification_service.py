@@ -1,3 +1,4 @@
+import asyncio
 import json
 from unittest import TestCase
 from uuid import UUID, uuid4
@@ -6,9 +7,10 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from regimpact.api import clause_classifier
 from regimpact.clause_classification_service import classify_and_store_clauses
 from regimpact.clause_classifier import ClauseLabel, ClausePrediction
-from regimpact.database import Base
+from regimpact.database import Base, get_session
 from regimpact.db_models import (
     AuditEventRecord,
     ClauseClassificationRecord,
@@ -16,6 +18,7 @@ from regimpact.db_models import (
     RegulationRecord,
 )
 from regimpact.domain import Section
+from regimpact.main import create_app
 from regimpact.repository import (
     RegulationNotFoundError,
     SqlAlchemyVersionRepository,
@@ -41,6 +44,12 @@ class FakeClassifier:
             dataset_id=self.dataset_id,
             probabilities={label: confidence, ClauseLabel.NON_OBLIGATION: 1 - confidence},
         )
+
+
+class CurrentClassifier(FakeClassifier):
+    model_id = "test-legal-encoder@dataset-v2:def456"
+    dataset_id = "dataset-v2"
+    dataset_sha256 = "b" * 64
 
 
 class ClauseClassificationServiceTests(TestCase):
@@ -82,8 +91,16 @@ class ClauseClassificationServiceTests(TestCase):
                 ),
             )
             self.version_id = version.version.id
+        self.app = create_app()
+
+        def session_override():  # type: ignore[no-untyped-def]
+            yield self.session
+
+        self.app.dependency_overrides[get_session] = session_override
+        self.app.dependency_overrides[clause_classifier] = CurrentClassifier
 
     def tearDown(self) -> None:
+        self.app.dependency_overrides.clear()
         self.session.close()
         self.engine.dispose()
 
@@ -133,3 +150,39 @@ class ClauseClassificationServiceTests(TestCase):
                 actor_id="intruder@example.test",
                 classifier=FakeClassifier(),
             )
+
+    def test_post_response_contains_only_the_current_model_run(self):
+        with self.session.begin():
+            classify_and_store_clauses(
+                self.session,
+                organization_id=self.organization_id,
+                version_id=self.version_id,
+                actor_id="historical-model",
+                classifier=FakeClassifier(),
+            )
+
+        response = asyncio.run(
+            self._request(
+                "POST",
+                f"/api/v1/versions/{self.version_id}/clauses/classify",
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["created_count"], 2)
+        self.assertEqual(len(body["classifications"]), 2)
+        self.assertEqual(
+            {item["model_id"] for item in body["classifications"]},
+            {CurrentClassifier.model_id},
+        )
+
+    async def _request(self, method: str, path: str):
+        transport = httpx.ASGITransport(app=self.app)
+        headers = {
+            "X-Organization-ID": str(self.organization_id),
+            "X-Actor-ID": "admin@example.test",
+        }
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.request(method, path, headers=headers)
+import httpx

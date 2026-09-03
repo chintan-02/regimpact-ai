@@ -638,6 +638,36 @@ def _clause_classification_response(
     )
 
 
+def _classification_responses_for_records(
+    session: Session,
+    *,
+    organization_id: UUID,
+    records: tuple[ClauseClassificationRecord, ...],
+) -> list[ClauseClassificationResponse]:
+    """Serialize exactly one classification run without pagination or history mixing."""
+    record_ids = tuple(record.id for record in records)
+    if not record_ids:
+        return []
+    statement = (
+        select(ClauseClassificationRecord, SectionRecord, RegulationVersionRecord)
+        .join(SectionRecord, SectionRecord.id == ClauseClassificationRecord.section_id)
+        .join(
+            RegulationVersionRecord,
+            RegulationVersionRecord.id == ClauseClassificationRecord.version_id,
+        )
+        .join(RegulationRecord, RegulationRecord.id == ClauseClassificationRecord.regulation_id)
+        .where(
+            RegulationRecord.organization_id == organization_id,
+            ClauseClassificationRecord.id.in_(record_ids),
+        )
+        .order_by(SectionRecord.position, ClauseClassificationRecord.id)
+    )
+    return [
+        _clause_classification_response(classification, section, version)
+        for classification, section, version in session.execute(statement).all()
+    ]
+
+
 @router.post(
     "/versions/{version_id}/obligations/extract",
     response_model=ObligationExtractionResponse,
@@ -727,13 +757,10 @@ def classify_version_clauses(
             actor_id=actor_id,
             classifier=classifier,
         )
-    classifications = list_clause_classifications(
+    classifications = _classification_responses_for_records(
         session=session,
         organization_id=organization_id,
-        version_id=version_id,
-        status_filter=None,
-        limit=2_000,
-        offset=0,
+        records=result.classifications,
     )
     return ClauseClassificationRunResponse(
         version_id=result.version_id,
@@ -749,6 +776,7 @@ def list_clause_classifications(
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
     version_id: UUID | None = None,
+    model_id: Annotated[str | None, Query(max_length=240)] = None,
     status_filter: Annotated[str | None, Query(alias="status", max_length=30)] = None,
     limit: Annotated[int, Query(ge=1, le=2_000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -772,6 +800,8 @@ def list_clause_classifications(
     )
     if version_id:
         statement = statement.where(ClauseClassificationRecord.version_id == version_id)
+    if model_id:
+        statement = statement.where(ClauseClassificationRecord.model_id == model_id)
     if status_filter:
         statement = statement.where(ClauseClassificationRecord.status == status_filter)
     return [
