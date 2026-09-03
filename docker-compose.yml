@@ -33,10 +33,13 @@ services:
       REGIMPACT_OBJECT_STORAGE_ROOT: /data/objects
       REGIMPACT_REDIS_URL: redis://redis:6379/0
       REGIMPACT_SOURCE_ALLOWED_DOMAINS: www.aer.ca
-      REGIMPACT_JWT_SECRET: local-compose-secret-change-before-production-2026
+      REGIMPACT_JWT_SECRET: ${REGIMPACT_JWT_SECRET:?Set REGIMPACT_JWT_SECRET in .env}
       REGIMPACT_LOG_LEVEL: INFO
       REGIMPACT_METRICS_ENABLED: "true"
       REGIMPACT_DEMO_MODE: "true"
+      REGIMPACT_DEMO_ADMIN_PASSWORD: ${REGIMPACT_DEMO_ADMIN_PASSWORD:?Set demo passwords in .env}
+      REGIMPACT_DEMO_ANALYST_PASSWORD: ${REGIMPACT_DEMO_ANALYST_PASSWORD:?Set demo passwords in .env}
+      REGIMPACT_DEMO_VIEWER_PASSWORD: ${REGIMPACT_DEMO_VIEWER_PASSWORD:?Set demo passwords in .env}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=2)"]
       interval: 10s
@@ -74,9 +77,9 @@ services:
     command: ["python", "-m", "regimpact.seed_demo"]
     environment:
       REGIMPACT_DATABASE_URL: postgresql+psycopg://regimpact:regimpact@postgres:5432/regimpact
-      REGIMPACT_DEMO_ADMIN_PASSWORD: ChangeMe-Admin-2026!
-      REGIMPACT_DEMO_ANALYST_PASSWORD: ChangeMe-Analyst-2026!
-      REGIMPACT_DEMO_VIEWER_PASSWORD: ChangeMe-Viewer-2026!
+      REGIMPACT_DEMO_ADMIN_PASSWORD: ${REGIMPACT_DEMO_ADMIN_PASSWORD:?Set demo passwords in .env}
+      REGIMPACT_DEMO_ANALYST_PASSWORD: ${REGIMPACT_DEMO_ANALYST_PASSWORD:?Set demo passwords in .env}
+      REGIMPACT_DEMO_VIEWER_PASSWORD: ${REGIMPACT_DEMO_VIEWER_PASSWORD:?Set demo passwords in .env}
     depends_on:
       migrate:
         condition: service_completed_successfully

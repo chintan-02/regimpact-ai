@@ -36,7 +36,7 @@ def _normalize(value: str) -> str:
     return _SPACE.sub(" ", value).strip()
 
 
-def _sentences(text: str) -> tuple[str, ...]:
+def split_sentences(text: str) -> tuple[str, ...]:
     normalized = _normalize(text)
     return tuple(part.strip() for part in _SENTENCE_BOUNDARY.split(normalized) if part.strip())
 
@@ -56,7 +56,7 @@ def _modality(value: str) -> ObligationModality:
 def extract_obligations(section: Section) -> tuple[ObligationCandidate, ...]:
     """Extract high-precision candidates with auditable confidence features."""
     candidates: list[ObligationCandidate] = []
-    for sentence in _sentences(section.text):
+    for sentence in split_sentences(section.text):
         for match in _MODALITY.finditer(sentence):
             subject = _normalize(match.group("subject")).rstrip(",")
             action = _normalize(match.group("action"))

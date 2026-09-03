@@ -1,5 +1,6 @@
 """Environment-backed application settings."""
 
+import secrets
 from functools import lru_cache
 
 from pydantic import Field, model_validator
@@ -32,32 +33,49 @@ class Settings(BaseSettings):
     source_request_timeout_seconds: float = Field(default=20.0, ge=1.0, le=60.0)
     embedding_provider: str = "feature_hash"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    clause_classifier_mode: str = "disabled"
+    clause_classifier_artifact_dir: str = ""
     auth_mode: str = "jwt"
-    jwt_secret: str = "local-development-secret-change-before-production"
+    jwt_secret: str = ""
     access_token_minutes: int = Field(default=30, ge=5, le=1_440)
     demo_mode: bool = False
     demo_admin_email: str = "admin@northstar.local"
-    demo_admin_password: str = "ChangeMe-Admin-2026!"
+    demo_admin_password: str = ""
     demo_analyst_email: str = "analyst@northstar.local"
-    demo_analyst_password: str = "ChangeMe-Analyst-2026!"
+    demo_analyst_password: str = ""
     demo_viewer_email: str = "viewer@northstar.local"
-    demo_viewer_password: str = "ChangeMe-Viewer-2026!"
+    demo_viewer_password: str = ""
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
+        is_production = self.environment.lower() in {"production", "prod"}
         if self.auth_mode not in {"jwt", "legacy_headers"}:
             raise ValueError("auth_mode must be jwt or legacy_headers")
         if self.object_storage_backend not in {"local", "azure_blob"}:
             raise ValueError("object_storage_backend must be local or azure_blob")
         if self.object_storage_backend == "azure_blob" and not self.azure_storage_account_url:
             raise ValueError("azure_blob storage requires REGIMPACT_AZURE_STORAGE_ACCOUNT_URL")
-        if self.environment.lower() in {"production", "prod"}:
-            if self.demo_mode:
-                raise ValueError("REGIMPACT_DEMO_MODE must be disabled in production")
+        if self.clause_classifier_mode not in {"disabled", "transformer"}:
+            raise ValueError("clause_classifier_mode must be disabled or transformer")
+        if self.clause_classifier_mode == "transformer" and not self.clause_classifier_artifact_dir:
+            raise ValueError("transformer classifier requires REGIMPACT_CLAUSE_CLASSIFIER_ARTIFACT_DIR")
+        if not self.jwt_secret:
+            if is_production:
+                raise ValueError("production requires REGIMPACT_JWT_SECRET")
+            self.jwt_secret = secrets.token_urlsafe(32)
+        if is_production and self.demo_mode:
+            raise ValueError("REGIMPACT_DEMO_MODE must be disabled in production")
+        if self.demo_mode and not all(
+            (
+                self.demo_admin_password,
+                self.demo_analyst_password,
+                self.demo_viewer_password,
+            )
+        ):
+            raise ValueError("demo mode requires all REGIMPACT_DEMO_*_PASSWORD settings")
+        if is_production:
             if self.auth_mode != "jwt":
                 raise ValueError("production requires JWT authentication")
-            if self.jwt_secret == "local-development-secret-change-before-production":
-                raise ValueError("production requires a unique REGIMPACT_JWT_SECRET")
             if len(self.jwt_secret) < 32:
                 raise ValueError("REGIMPACT_JWT_SECRET must contain at least 32 characters")
         return self
