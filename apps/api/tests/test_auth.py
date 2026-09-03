@@ -1,5 +1,6 @@
 import asyncio
 import os
+import secrets
 from unittest import TestCase
 from unittest.mock import patch
 from uuid import uuid4
@@ -28,6 +29,7 @@ class AuthenticationTests(TestCase):
         self.session = Session(self.engine, expire_on_commit=False)
         self.organization_id = uuid4()
         self.user_id = uuid4()
+        self.password = secrets.token_urlsafe(24)
         with self.session.begin():
             self.session.add(OrganizationRecord(id=self.organization_id, name="Northstar Energy"))
             self.session.add(
@@ -37,7 +39,7 @@ class AuthenticationTests(TestCase):
                     email="analyst@example.test",
                     display_name="Reference Analyst",
                     role="analyst",
-                    password_hash=hash_password("Correct-Horse-2026!"),
+                    password_hash=hash_password(self.password),
                 )
             )
         self.user = self.session.get(UserRecord, self.user_id)
@@ -64,7 +66,7 @@ class AuthenticationTests(TestCase):
             self.request(
                 "POST",
                 "/api/v1/auth/login",
-                json={"email": "ANALYST@example.test", "password": "Correct-Horse-2026!"},
+                json={"email": "ANALYST@example.test", "password": self.password},
             )
         )
         self.assertEqual(response.status_code, 200)
@@ -85,7 +87,7 @@ class AuthenticationTests(TestCase):
             self.request(
                 "POST",
                 "/api/v1/auth/login",
-                json={"email": "analyst@example.test", "password": "Wrong-Password"},
+                json={"email": "analyst@example.test", "password": f"{self.password}-wrong"},
             )
         )
         self.assertEqual(response.status_code, 401)
@@ -98,12 +100,19 @@ class AuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_demo_login_uses_real_user_and_is_audited(self) -> None:
+        demo_password = secrets.token_urlsafe(24)
         self.user.email = "analyst@northstar.local"
-        self.user.password_hash = hash_password("ChangeMe-Analyst-2026!")
+        self.user.password_hash = hash_password(demo_password)
         self.session.commit()
         with patch.dict(
             os.environ,
-            {"REGIMPACT_DEMO_MODE": "true", "REGIMPACT_ENVIRONMENT": "local"},
+            {
+                "REGIMPACT_DEMO_MODE": "true",
+                "REGIMPACT_ENVIRONMENT": "local",
+                "REGIMPACT_DEMO_ADMIN_PASSWORD": secrets.token_urlsafe(24),
+                "REGIMPACT_DEMO_ANALYST_PASSWORD": demo_password,
+                "REGIMPACT_DEMO_VIEWER_PASSWORD": secrets.token_urlsafe(24),
+            },
         ):
             get_settings.cache_clear()
             try:
@@ -129,7 +138,7 @@ class AuthenticationTests(TestCase):
             {
                 "REGIMPACT_DEMO_MODE": "true",
                 "REGIMPACT_ENVIRONMENT": "production",
-                "REGIMPACT_JWT_SECRET": "a-production-secret-that-is-long-enough-2026",
+                "REGIMPACT_JWT_SECRET": secrets.token_urlsafe(32),
             },
         ):
             get_settings.cache_clear()

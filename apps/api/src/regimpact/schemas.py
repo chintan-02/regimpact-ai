@@ -244,6 +244,36 @@ class ObligationExtractionResponse(BaseModel):
     obligations: list[ObligationResponse]
 
 
+class ClauseClassificationResponse(BaseModel):
+    id: UUID
+    regulation_id: UUID
+    version_id: UUID
+    section_id: UUID
+    section_key: str
+    heading: str
+    text: str
+    label: str
+    confidence: float
+    abstained: bool
+    status: str
+    model_id: str
+    dataset_id: str
+    dataset_sha256: str
+    probabilities: dict[str, float]
+    page: int | None
+    source_uri: str
+    version_ordinal: int
+    created_at: datetime
+
+
+class ClauseClassificationRunResponse(BaseModel):
+    version_id: UUID
+    created_count: int
+    existing_count: int
+    abstained_count: int
+    classifications: list[ClauseClassificationResponse]
+
+
 class CalibrationBinResponse(BaseModel):
     upper_bound: float
     calibrated_confidence: float

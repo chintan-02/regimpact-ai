@@ -1,0 +1,14 @@
+{"clause_id":"aer-060-4.2-a","document_id":"aer-060-v13","regulator":"AER","text":"Operators must notify the regulator within 24 hours of a reportable incident.","label":"reporting_requirement"}
+{"clause_id":"aer-060-4.2-b","document_id":"aer-060-v13","regulator":"AER","text":"Operators must preserve incident records for seven years.","label":"record_retention_requirement"}
+{"clause_id":"aer-060-4.2-c","document_id":"aer-060-v13","regulator":"AER","text":"Operators may submit supporting photographs through the portal.","label":"permission"}
+{"clause_id":"osc-101-3-a","document_id":"osc-101-v4","regulator":"OSC","text":"A reporting issuer shall file the disclosure statement annually.","label":"reporting_requirement"}
+{"clause_id":"osc-101-3-b","document_id":"osc-101-v4","regulator":"OSC","text":"A material change means a change reasonably expected to affect value.","label":"definition"}
+{"clause_id":"osc-101-3-c","document_id":"osc-101-v4","regulator":"OSC","text":"An issuer shall not omit a known material risk.","label":"prohibition"}
+{"clause_id":"osfi-b10-5-a","document_id":"osfi-b10-v2","regulator":"OSFI","text":"The institution must maintain a third-party risk framework.","label":"obligation"}
+{"clause_id":"osfi-b10-5-b","document_id":"osfi-b10-v2","regulator":"OSFI","text":"The institution may use a risk-based assessment method.","label":"permission"}
+{"clause_id":"osfi-b10-5-c","document_id":"osfi-b10-v2","regulator":"OSFI","text":"This section describes the guideline's intended outcomes.","label":"non_obligation"}
+{"clause_id":"oipc-pipa-8-a","document_id":"oipc-pipa-v7","regulator":"OIPC","text":"An organization must not disclose personal information without authority.","label":"prohibition"}
+{"clause_id":"oipc-pipa-8-b","document_id":"oipc-pipa-v7","regulator":"OIPC","text":"Breach record means the written record required by this section.","label":"definition"}
+{"clause_id":"oipc-pipa-8-c","document_id":"oipc-pipa-v7","regulator":"OIPC","text":"An organization shall retain the breach record for twenty-four months.","label":"record_retention_requirement"}
+{"clause_id":"cer-ops-2-a","document_id":"cer-ops-v5","regulator":"CER","text":"A company is required to test the emergency system each year.","label":"obligation"}
+{"clause_id":"cer-ops-2-b","document_id":"cer-ops-v5","regulator":"CER","text":"The guidance includes examples of acceptable test evidence.","label":"non_obligation"}

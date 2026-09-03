@@ -125,7 +125,7 @@ The current release deliberately favors explainable, testable components for hig
 | Sentence-transformer embeddings and hybrid retrieval | Implemented |
 | Evaluated deterministic obligation extraction | Implemented |
 | Persisted policy-gated workflow with human approval | Implemented |
-| Fine-tuned regulatory-clause classifier | **Planned for v0.6; not currently implemented** |
+| Fine-tuned regulatory-clause classifier | v0.6 training, evaluation, abstention, lineage, and fail-closed serving path implemented; no artifact promoted without a qualifying corpus |
 | LangGraph orchestration | **Planned for v0.7; not currently implemented** |
 | AKS/Kubernetes runtime | **Planned for v1.0; not currently implemented** |
 
@@ -229,7 +229,7 @@ The verified v0.5.0 release additionally passed authenticated OIDC deployment, c
 | v0.4.1 | Responsive navigation and production-safe demo account selection |
 | v0.5.0 | Verified Azure staging deployment and operational hardening |
 | **v0.5.1** | **Documentation, final evidence alignment, and portfolio presentation** |
-| v0.6 | Evaluated and calibrated fine-tuned regulatory-clause classifier with abstention and model lineage |
+| **v0.6** | **In progress: governed fine-tuning, document-isolated evaluation, calibration, abstention, prediction lineage, and promotion gates** |
 | v0.7 | LangGraph orchestration with persisted state, node-level retries, policy gates, and human interruption |
 | v0.8 | Backup, restore, rollback, failure-injection, and reliability exercises |
 | v1.0 | AKS, Helm, autoscaling, production identity/networking, and Kubernetes recovery validation |
@@ -248,6 +248,8 @@ For v0.6, evaluation will use document-isolated train/validation/test splits, de
 - [Authentication and RBAC](docs/authentication-and-rbac.md)
 - [Observability](docs/observability.md)
 - [Hybrid retrieval](docs/hybrid-retrieval.md)
+- [Regulatory-clause classifier](docs/clause-classifier.md)
+- [Classifier model-card template](docs/model-card-clause-classifier-template.md)
 - [Analyst review workflow](docs/analyst-review-workflow.md)
 
 ## License

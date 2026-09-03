@@ -329,6 +329,65 @@ class ObligationExtractionRunRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class ClauseClassificationRecord(Base):
+    __tablename__ = "clause_classifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "section_id", "clause_hash", "model_id", name="uq_clause_classification_model"
+        ),
+        Index("ix_clause_classification_org_status", "organization_id", "status"),
+        Index("ix_clause_classification_version", "version_id", "section_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(SAUuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    regulation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("regulations.id", ondelete="CASCADE"), nullable=False
+    )
+    version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("regulation_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    section_id: Mapped[UUID] = mapped_column(
+        ForeignKey("regulation_sections.id", ondelete="CASCADE"), nullable=False
+    )
+    clause_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    label: Mapped[str] = mapped_column(String(50), nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(6, 5), nullable=False)
+    abstained: Mapped[bool] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(240), nullable=False)
+    dataset_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    dataset_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    probabilities_json: Mapped[str] = mapped_column(Text, nullable=False)
+    page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class ClauseClassificationRunRecord(Base):
+    __tablename__ = "clause_classification_runs"
+    __table_args__ = (
+        UniqueConstraint("version_id", "model_id", name="uq_clause_run_version_model"),
+        Index("ix_clause_run_org_created", "organization_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(SAUuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    version_id: Mapped[UUID] = mapped_column(
+        ForeignKey("regulation_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    model_id: Mapped[str] = mapped_column(String(240), nullable=False)
+    dataset_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    dataset_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    clause_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    abstained_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class SectionSearchRecord(Base):
     __tablename__ = "section_search_index"
     __table_args__ = (

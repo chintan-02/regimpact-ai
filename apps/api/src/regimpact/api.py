@@ -11,9 +11,16 @@ from sqlalchemy.orm import Session, aliased
 
 from .auth import AdminUser, Authenticated
 from .calibration import CURRENT_POLICY
+from .classifier_runtime import (
+    TransformerClauseClassifier,
+    UnpromotedModelError,
+    load_promoted_classifier,
+)
+from .clause_classification_service import classify_and_store_clauses
 from .config import get_settings
 from .database import get_session
 from .db_models import (
+    ClauseClassificationRecord,
     IngestionJobRecord,
     ObligationRecord,
     OutboxEventRecord,
@@ -37,6 +44,8 @@ from .schemas import (
     ChangeRegisterItem,
     ChangeResponse,
     CitationResponse,
+    ClauseClassificationResponse,
+    ClauseClassificationRunResponse,
     HybridSearchResponse,
     IngestionJobResponse,
     IngestionJobState,
@@ -73,6 +82,22 @@ def actor_header(user: Authenticated) -> str:
 
 def object_storage() -> ObjectStorage:
     return configured_object_storage(get_settings())
+
+
+def clause_classifier() -> TransformerClauseClassifier:
+    settings = get_settings()
+    if settings.clause_classifier_mode != "transformer":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="clause classifier is disabled; deterministic extraction remains active",
+        )
+    try:
+        return load_promoted_classifier(settings.clause_classifier_artifact_dir)
+    except (OSError, ValueError, KeyError, UnpromotedModelError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"clause classifier unavailable: {exc}",
+        ) from exc
 
 
 def malware_scanner() -> MalwareScanner:
@@ -585,6 +610,34 @@ def _obligation_response(
     )
 
 
+def _clause_classification_response(
+    classification: ClauseClassificationRecord,
+    section: SectionRecord,
+    version: RegulationVersionRecord,
+) -> ClauseClassificationResponse:
+    return ClauseClassificationResponse(
+        id=classification.id,
+        regulation_id=classification.regulation_id,
+        version_id=classification.version_id,
+        section_id=classification.section_id,
+        section_key=section.section_key,
+        heading=section.heading,
+        text=classification.text,
+        label=classification.label,
+        confidence=float(classification.confidence),
+        abstained=classification.abstained,
+        status=classification.status,
+        model_id=classification.model_id,
+        dataset_id=classification.dataset_id,
+        dataset_sha256=classification.dataset_sha256,
+        probabilities=json.loads(classification.probabilities_json),
+        page=classification.page,
+        source_uri=version.source_uri,
+        version_ordinal=version.ordinal,
+        created_at=classification.created_at,
+    )
+
+
 @router.post(
     "/versions/{version_id}/obligations/extract",
     response_model=ObligationExtractionResponse,
@@ -651,6 +704,79 @@ def list_obligations(
     return [
         _obligation_response(obligation, section, version)
         for obligation, section, version in session.execute(statement).all()
+    ]
+
+
+@router.post(
+    "/versions/{version_id}/clauses/classify",
+    response_model=ClauseClassificationRunResponse,
+)
+def classify_version_clauses(
+    version_id: UUID,
+    session: DbSession,
+    organization_id: Annotated[UUID, Depends(organization_header)],
+    actor_id: Annotated[str, Depends(actor_header)],
+    classifier: Annotated[TransformerClauseClassifier, Depends(clause_classifier)],
+    _admin: AdminUser,
+) -> ClauseClassificationRunResponse:
+    with session.begin():
+        result = classify_and_store_clauses(
+            session,
+            organization_id=organization_id,
+            version_id=version_id,
+            actor_id=actor_id,
+            classifier=classifier,
+        )
+    classifications = list_clause_classifications(
+        session=session,
+        organization_id=organization_id,
+        version_id=version_id,
+        status_filter=None,
+        limit=2_000,
+        offset=0,
+    )
+    return ClauseClassificationRunResponse(
+        version_id=result.version_id,
+        created_count=result.created_count,
+        existing_count=result.existing_count,
+        abstained_count=result.abstained_count,
+        classifications=classifications,
+    )
+
+
+@router.get("/clause-classifications", response_model=list[ClauseClassificationResponse])
+def list_clause_classifications(
+    session: DbSession,
+    organization_id: Annotated[UUID, Depends(organization_header)],
+    version_id: UUID | None = None,
+    status_filter: Annotated[str | None, Query(alias="status", max_length=30)] = None,
+    limit: Annotated[int, Query(ge=1, le=2_000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[ClauseClassificationResponse]:
+    statement = (
+        select(ClauseClassificationRecord, SectionRecord, RegulationVersionRecord)
+        .join(SectionRecord, SectionRecord.id == ClauseClassificationRecord.section_id)
+        .join(
+            RegulationVersionRecord,
+            RegulationVersionRecord.id == ClauseClassificationRecord.version_id,
+        )
+        .join(RegulationRecord, RegulationRecord.id == ClauseClassificationRecord.regulation_id)
+        .where(RegulationRecord.organization_id == organization_id)
+        .order_by(
+            RegulationVersionRecord.ordinal.desc(),
+            SectionRecord.position,
+            ClauseClassificationRecord.id,
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    if version_id:
+        statement = statement.where(ClauseClassificationRecord.version_id == version_id)
+    if status_filter:
+        statement = statement.where(ClauseClassificationRecord.status == status_filter)
+    return [
+        _clause_classification_response(classification, section, version)
+        for classification, section, version in session.execute(statement).all()
     ]
 
 
