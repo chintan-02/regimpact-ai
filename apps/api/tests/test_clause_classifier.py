@@ -13,6 +13,7 @@ from regimpact.classifier_runtime import TransformerClauseClassifier, Unpromoted
 from regimpact.clause_classifier import (
     ClauseLabel,
     ModelManifest,
+    training_recipe_fingerprint,
 )
 from regimpact.clause_dataset import dataset_summary, load_jsonl, split_by_document
 from regimpact.config import Settings
@@ -193,3 +194,11 @@ def test_classifier_is_fail_closed_by_default():
     settings = Settings()
     assert settings.clause_classifier_mode == "disabled"
     assert settings.clause_classifier_artifact_dir == ""
+
+
+def test_training_recipe_changes_model_identity_input():
+    recipe = {"base_model": "legal-bert", "dataset_sha256": "a" * 64, "seed": 42, "epochs": 3.0}
+    different_seed = {**recipe, "seed": 43}
+    different_epochs = {**recipe, "epochs": 4.0}
+    assert training_recipe_fingerprint(recipe) != training_recipe_fingerprint(different_seed)
+    assert training_recipe_fingerprint(recipe) != training_recipe_fingerprint(different_epochs)

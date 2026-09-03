@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class ClauseLabel(StrEnum):
@@ -55,6 +56,12 @@ class ClauseClassifier(Protocol):
     dataset_sha256: str
 
     def predict(self, text: str) -> ClausePrediction: ...
+
+
+def training_recipe_fingerprint(recipe: dict[str, Any]) -> str:
+    """Identify the complete deterministic training recipe used for lineage."""
+    encoded = json.dumps(recipe, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,10 +12,18 @@ from dataclasses import asdict
 from pathlib import Path
 
 from regimpact.classifier_evaluation import ScoredPrediction, evaluate, select_abstention_threshold
-from regimpact.clause_classifier import ClauseLabel, ModelManifest, PromotionPolicy
+from regimpact.clause_classifier import (
+    ClauseLabel,
+    ModelManifest,
+    PromotionPolicy,
+    training_recipe_fingerprint,
+)
 from regimpact.clause_dataset import dataset_summary, load_jsonl, split_by_document
 
-
+LEARNING_RATE = 2e-5
+TRAIN_BATCH_SIZE = 16
+EVAL_BATCH_SIZE = 32
+WEIGHT_DECAY = 0.01
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, required=True)
@@ -68,11 +76,11 @@ def main() -> int:
     )
     training_args = TrainingArguments(
         output_dir=str(args.output / "checkpoints"),
-        learning_rate=2e-5,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=32,
+        learning_rate=LEARNING_RATE,
+        per_device_train_batch_size=TRAIN_BATCH_SIZE,
+        per_device_eval_batch_size=EVAL_BATCH_SIZE,
         num_train_epochs=args.epochs,
-        weight_decay=0.01,
+        weight_decay=WEIGHT_DECAY,
         eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
@@ -129,7 +137,22 @@ def main() -> int:
     test_logits = trainer.predict(test_set).predictions
     test_report = evaluate(scored(test_logits, split.test, temperature=temperature), confidence_threshold=threshold)
     summary = dataset_summary(bundle.rows)
-    model_id = f"{args.base_model}@{args.dataset_id}:{bundle.sha256[:12]}"
+    training_recipe = {
+        "base_model": args.base_model,
+        "dataset_sha256": bundle.sha256,
+        "epochs": args.epochs,
+        "eval_batch_size": EVAL_BATCH_SIZE,
+        "learning_rate": LEARNING_RATE,
+        "seed": args.seed,
+        "split_strategy": "document-sha256-v1",
+        "train_batch_size": TRAIN_BATCH_SIZE,
+        "weight_decay": WEIGHT_DECAY,
+    }
+    recipe_sha256 = training_recipe_fingerprint(training_recipe)
+    model_id = (
+        f"{args.base_model}@{args.dataset_id}:"
+        f"{bundle.sha256[:12]}-{recipe_sha256[:12]}"
+    )
     manifest = ModelManifest(
         model_id=model_id,
         base_model=args.base_model,
@@ -157,6 +180,8 @@ def main() -> int:
     }
     payload["promotion_failures"] = list(manifest.promotion_failures(policy))
     payload["promoted"] = manifest.promoted
+    payload["training_recipe"] = training_recipe
+    payload["training_recipe_sha256"] = recipe_sha256
     (args.output / "manifest.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

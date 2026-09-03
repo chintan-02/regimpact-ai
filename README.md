@@ -186,11 +186,13 @@ The system is a modular monolith with independently executed web, API, worker, d
 ### Complete stack
 
 ```bash
+cp .env.example .env
+# Replace the local JWT and demo-password placeholders in .env.
 docker compose up -d --build
 docker compose --profile demo run --rm seed
 ```
 
-Open `http://localhost:3000` and sign in with a local-only account configured in `docker-compose.yml`: `admin@northstar.local`, `analyst@northstar.local`, or `viewer@northstar.local`. Replace all demonstration credentials outside local development. The synthetic clauses are test fixtures, not legal or regulatory advice.
+Open `http://localhost:3000` and sign in with a local-only account configured in `.env`: `admin@northstar.local`, `analyst@northstar.local`, or `viewer@northstar.local`. The API and seed job receive the same required demo credentials through Compose substitution. Never commit `.env` or reuse demonstration credentials outside local development. The synthetic clauses are test fixtures, not legal or regulatory advice.
 
 ### Backend only
 
