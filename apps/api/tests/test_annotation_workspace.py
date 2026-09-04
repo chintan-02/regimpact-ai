@@ -123,6 +123,31 @@ def test_package_validator_accepts_partial_progress_and_rejects_bad_timestamp(
         validate_annotation_package(sample_path, package_path, expected_slot="A")
 
 
+@pytest.mark.parametrize(
+    "timestamp",
+    ("2026-09-04T17:00:00Z", "2026-09-04T17:00:00+0000", "2026-09-04 17:00:00-06:00"),
+)
+def test_package_validator_accepts_supported_aware_timestamp_forms(
+    tmp_path: Path, timestamp: str
+) -> None:
+    sample_path, package_path, package = _files(tmp_path)
+    package["annotator_id"] = "human-a"
+    package["tasks"][0]["label"] = "obligation"
+    package["tasks"][0]["annotated_at"] = timestamp
+    package_path.write_text(json.dumps(package))
+    validate_annotation_package(sample_path, package_path, expected_slot="A")
+
+
+def test_package_validator_rejects_normalized_invalid_calendar_date(tmp_path: Path) -> None:
+    sample_path, package_path, package = _files(tmp_path)
+    package["annotator_id"] = "human-a"
+    package["tasks"][0]["label"] = "obligation"
+    package["tasks"][0]["annotated_at"] = "2026-02-30T17:00:00Z"
+    package_path.write_text(json.dumps(package))
+    with pytest.raises(AnnotationSamplingError, match="incomplete task"):
+        validate_annotation_package(sample_path, package_path, expected_slot="A")
+
+
 def test_package_validator_rejects_modified_clause(tmp_path: Path) -> None:
     sample_path, package_path, package = _files(tmp_path)
     package["tasks"][0]["text"] = "modified"

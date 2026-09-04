@@ -16,6 +16,9 @@ from .clause_classifier import ClauseLabel
 
 SAMPLING_POLICY_VERSION = "regimpact-clause-pilot-v1"
 _STRATA = tuple(label.value for label in ClauseLabel)
+_AWARE_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})$"
+)
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "record_retention_requirement",
@@ -244,7 +247,7 @@ def sampling_report(
 
 
 def _aware_timestamp(value: object) -> bool:
-    if not isinstance(value, str):
+    if not isinstance(value, str) or _AWARE_TIMESTAMP.fullmatch(value) is None:
         return False
     try:
         return datetime.fromisoformat(value).tzinfo is not None

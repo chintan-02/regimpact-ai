@@ -73,7 +73,18 @@ const labels={reporting_requirement:'Reporting requirement',record_retention_req
 const key=`regimpact:${original.sample_sha256}:${original.package_id}`;
 const immutable=['clause_id','document_id','regulator','source_url','section_id','heading','page','text','text_sha256','guideline_version'];
 const $=id=>document.getElementById(id);
-function awareTimestamp(value){if(typeof value!=='string')return false;const parsed=new Date(value);return !Number.isNaN(parsed.valueOf())&&/(Z|[+-]\d\d:\d\d)$/.test(value);}
+function awareTimestamp(value){
+  if(typeof value!=='string')return false;
+  const match=/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:?\d{2})$/.exec(value);
+  if(!match)return false;
+  const [year,month,day,hour,minute,second]=match.slice(1,7).map(Number),offset=match[8];
+  const probe=new Date(Date.UTC(year,month-1,day,hour,minute,second));
+  const validCalendar=probe.getUTCFullYear()===year&&probe.getUTCMonth()===month-1&&probe.getUTCDate()===day&&probe.getUTCHours()===hour&&probe.getUTCMinutes()===minute&&probe.getUTCSeconds()===second;
+  if(!validCalendar)return false;
+  if(offset==='Z')return true;
+  const parts=offset.slice(1).replace(':','');
+  return Number(parts.slice(0,2))<24&&Number(parts.slice(2))<60;
+}
 function validImport(value){
   if(!value||typeof value!=='object'||value.schema_version!==original.schema_version||value.package_id!==original.package_id||value.annotator_slot!==original.annotator_slot||value.sample_sha256!==original.sample_sha256||value.candidate_queue_sha256!==original.candidate_queue_sha256||value.sampling_policy_version!==original.sampling_policy_version||value.guideline_version!==original.guideline_version||JSON.stringify(value.allowed_labels)!==JSON.stringify(original.allowed_labels)||value.labels_visible_from_other_annotator!==false||value.model_training_authorized!==false||!Array.isArray(value.tasks)||value.tasks.length!==original.tasks.length)return false;
   if(value.annotator_id!==null&&(typeof value.annotator_id!=='string'||!value.annotator_id.trim()))return false;
