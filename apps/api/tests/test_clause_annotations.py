@@ -125,6 +125,15 @@ def test_adjudication_for_agreed_clause_is_rejected() -> None:
         adjudicate_annotations((candidate(),), votes, (decision,))
 
 
+def test_mismatched_guideline_versions_are_rejected() -> None:
+    votes = (
+        annotation("c1", "a", ClauseLabel.OBLIGATION),
+        replace(annotation("c1", "b", ClauseLabel.OBLIGATION), guideline_version="obsolete-v0"),
+    )
+    with pytest.raises(ValueError, match="guideline version"):
+        adjudicate_annotations((candidate(),), votes)
+
+
 def qualifying_dataset() -> AdjudicatedDataset:
     labels = tuple(ClauseLabel)
     rows = []
@@ -136,7 +145,9 @@ def qualifying_dataset() -> AdjudicatedDataset:
         item = candidate(f"c-{index}", document_id=document_id, text=text)
         item = replace(item, regulator=f"R{index % 3}")
         rows.append(LabelledClause(item.clause_id, item.document_id, item.regulator, item.text, label))
-        lineage.append({**asdict(item), "label": label.value})
+        lineage.append(
+            {**asdict(item), "label": label.value, "guideline_version": GUIDELINE_VERSION}
+        )
     return AdjudicatedDataset(tuple(rows), tuple(lineage), (), 0.91, 47)
 
 
@@ -157,4 +168,13 @@ def test_duplicate_lineage_ids_block_dataset() -> None:
     dataset = qualifying_dataset()
     lineage = (dataset.lineage[0], dataset.lineage[0], *dataset.lineage[2:])
     report = audit_dataset(replace(dataset, lineage=lineage))
+    assert "invalid_lineage" in report["failures"]
+
+
+@pytest.mark.parametrize("field", ["text", "document_id", "regulator", "label", "text_sha256"])
+def test_lineage_must_match_training_row(field: str) -> None:
+    dataset = qualifying_dataset()
+    first = dict(dataset.lineage[0])
+    first[field] = "tampered"
+    report = audit_dataset(replace(dataset, lineage=(first, *dataset.lineage[1:])))
     assert "invalid_lineage" in report["failures"]

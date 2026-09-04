@@ -253,6 +253,9 @@ def adjudicate_annotations(
         if len(votes) != 2 or len(annotators) != 2:
             unresolved.append(clause_id)
             continue
+        guideline_versions = {item.guideline_version for item in votes}
+        if guideline_versions != {GUIDELINE_VERSION}:
+            raise ValueError(f"unsupported or mismatched guideline version: {clause_id}")
         dual_count += 1
         if votes[0].label == votes[1].label:
             label = votes[0].label
@@ -282,7 +285,7 @@ def adjudicate_annotations(
             {
                 **asdict(candidate),
                 "label": label.value,
-                "guideline_version": votes[0].guideline_version,
+                "guideline_version": GUIDELINE_VERSION,
                 "annotators": sorted(annotators),
                 "resolution": resolution,
                 "adjudicator": decisions[clause_id].reviewer_id if resolution == "adjudicated" else None,
@@ -326,12 +329,20 @@ def audit_dataset(dataset: AdjudicatedDataset) -> dict[str, Any]:
     if len(set(lineage_ids)) != len(lineage_ids) or set(lineage_ids) != set(row_ids):
         failures.append("invalid_lineage")
     else:
+        rows_by_id = {row.clause_id: row for row in dataset.rows}
         for item in dataset.lineage:
+            row = rows_by_id[str(item["clause_id"])]
+            expected_text_hash = sha256(row.text.encode()).hexdigest()
             if (
                 item.get("rights_status") != APPROVED_RIGHTS_STATUS
                 or not _SHA256.fullmatch(str(item.get("content_sha256", "")))
-                or not _SHA256.fullmatch(str(item.get("text_sha256", "")))
+                or item.get("text_sha256") != expected_text_hash
                 or not item.get("source_url")
+                or item.get("document_id") != row.document_id
+                or item.get("regulator") != row.regulator
+                or item.get("text") != row.text
+                or item.get("label") != row.label.value
+                or item.get("guideline_version") != GUIDELINE_VERSION
             ):
                 failures.append("invalid_lineage")
                 break
