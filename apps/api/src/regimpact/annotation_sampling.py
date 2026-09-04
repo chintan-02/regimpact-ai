@@ -11,7 +11,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from .clause_annotations import GUIDELINE_VERSION, ClauseCandidate, load_json_records
+from .clause_annotations import GUIDELINE_VERSION, Annotation, ClauseCandidate, load_json_records
 from .clause_classifier import ClauseLabel
 
 SAMPLING_POLICY_VERSION = "regimpact-clause-pilot-v1"
@@ -115,10 +115,12 @@ def sample_pilot(
     selected_ids: set[str] = set()
     quota = target // len(by_document)
     for document_id in sorted(by_document):
+        offset = int(_stable_rank(seed, "document-strata", document_id)[:8], 16) % len(_STRATA)
+        document_strata = _STRATA[offset:] + _STRATA[:offset]
         values = sorted(
             by_document[document_id],
             key=lambda item: (
-                _STRATA.index(item.sampling_stratum),
+                document_strata.index(item.sampling_stratum),
                 _stable_rank(seed, document_id, item.sampling_stratum, item.candidate.clause_id),
             ),
         )
@@ -129,7 +131,7 @@ def sample_pilot(
         document_sample: list[SampledClause] = []
         while len(document_sample) < min(quota, len(values)):
             progressed = False
-            for stratum in _STRATA:
+            for stratum in document_strata:
                 if buckets[stratum] and len(document_sample) < quota:
                     document_sample.append(buckets[stratum].pop(0))
                     progressed = True
@@ -350,3 +352,30 @@ def annotation_progress_report(
         "third_party_adjudication_required": bool(disagreements),
         "model_training_authorized": False,
     }
+
+
+def export_completed_annotations(
+    sample_path: Path, package_a_path: Path, package_b_path: Path
+) -> tuple[tuple[Annotation, ...], dict[str, Any]]:
+    """Export two complete, validated packages in the adjudicator's JSONL schema."""
+    report = annotation_progress_report(sample_path, package_a_path, package_b_path)
+    if report["status"] != "ready_for_adjudication":
+        raise AnnotationSamplingError("both annotation packages must be complete before export")
+    annotations: list[Annotation] = []
+    for path in (package_a_path, package_b_path):
+        package = json.loads(path.read_text(encoding="utf-8"))
+        annotator_id = str(package["annotator_id"])
+        for task in package["tasks"]:
+            annotations.append(
+                Annotation(
+                    clause_id=str(task["clause_id"]),
+                    annotator_id=annotator_id,
+                    label=ClauseLabel(str(task["label"])),
+                    guideline_version=str(task["guideline_version"]),
+                    annotated_at=str(task["annotated_at"]),
+                    notes=str(task.get("notes", "")),
+                )
+            )
+    if len(annotations) != int(report["sample_count"]) * 2:
+        raise AnnotationSamplingError("export does not contain two annotations per sampled clause")
+    return tuple(annotations), report

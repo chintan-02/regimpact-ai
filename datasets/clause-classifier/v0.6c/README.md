@@ -144,3 +144,18 @@ identities and obsolete guidelines. When both packages are complete it reports r
 the exact disagreements requiring an independent third reviewer. Heuristic balance does not prove
 final class balance; adjudicate the pilot, inspect actual labels, and construct a targeted second
 batch before attempting the 500-example dataset gate.
+
+After both packages report complete, export the validated decisions into the JSONL schema accepted
+by `adjudicate_clause_dataset.py`:
+
+```bash
+PYTHONPATH=src python scripts/export_annotation_pilot.py \
+  --sample "$REGIMPACT_CORPUS_ROOT/pilot-sample.json" \
+  --package-a "$REGIMPACT_CORPUS_ROOT/pilot-annotator-a.json" \
+  --package-b "$REGIMPACT_CORPUS_ROOT/pilot-annotator-b.json" \
+  --annotations "$REGIMPACT_CORPUS_ROOT/pilot-annotations.jsonl"
+```
+
+Export fails until every sampled clause has two complete annotations from different humans. The
+output contains exactly two governed `Annotation` records per clause and can be passed directly as
+the adjudication command's `--annotations` input.

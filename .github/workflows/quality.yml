@@ -63,6 +63,7 @@ jobs:
           python scripts/extract_regulatory_sections.py --help
           python scripts/prepare_annotation_pilot.py --help
           python scripts/report_annotation_pilot.py --help
+          python scripts/export_annotation_pilot.py --help
           python scripts/acquire_regulatory_corpus.py --validate-only \
             --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \
             --lock ../../datasets/clause-classifier/v0.6c/acquisition-lock.json \

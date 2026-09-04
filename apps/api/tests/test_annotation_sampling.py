@@ -9,6 +9,7 @@ from regimpact.annotation_sampling import (
     AnnotationSamplingError,
     annotation_progress_report,
     build_blinded_package,
+    export_completed_annotations,
     sample_payload,
     sample_pilot,
     sampling_report,
@@ -132,6 +133,11 @@ def test_target_must_cover_every_document() -> None:
         sample_pilot(corpus(), target=24)
 
 
+def test_single_candidate_per_document_rotates_strata() -> None:
+    sample = sample_pilot(corpus(), target=25, seed="fixed")
+    assert len({item.sampling_stratum for item in sample}) > 1
+
+
 def test_progress_report_requires_independent_annotators_and_immutable_tasks(
     tmp_path: Path,
 ) -> None:
@@ -168,3 +174,28 @@ def test_progress_report_requires_independent_annotators_and_immutable_tasks(
     paths[1].write_text(json.dumps(package_b))
     with pytest.raises(AnnotationSamplingError, match="task was modified"):
         annotation_progress_report(sample_path, paths[0], paths[1])
+
+
+def test_complete_packages_export_to_existing_annotation_schema(tmp_path: Path) -> None:
+    sample = sample_pilot(corpus(), target=25, seed="export")
+    records = sample_payload(sample)
+    sample_path = tmp_path / "sample.json"
+    sample_path.write_text(
+        json.dumps({"schema_version": "regimpact-sampled-clauses-v1", "records": records})
+    )
+    paths = []
+    for slot, annotator in (("A", "human-a"), ("B", "human-b")):
+        package = build_blinded_package(
+            sample, slot=slot, seed="export", candidate_queue_sha256="f" * 64
+        )
+        package["annotator_id"] = annotator
+        for task in package["tasks"]:
+            task["label"] = "obligation"
+            task["annotated_at"] = "2026-09-04T17:00:00+00:00"
+        path = tmp_path / f"{slot}.json"
+        path.write_text(json.dumps(package))
+        paths.append(path)
+    annotations, report = export_completed_annotations(sample_path, paths[0], paths[1])
+    assert len(annotations) == 50
+    assert {item.annotator_id for item in annotations} == {"human-a", "human-b"}
+    assert report["status"] == "ready_for_adjudication"
