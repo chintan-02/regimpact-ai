@@ -73,10 +73,13 @@ python scripts/train_clause_classifier.py \
   --dataset /path/to/clauses-v1.jsonl \
   --dataset-id clauses-v1 \
   --dataset-audit /path/to/clauses-v1-audit.json \
-  --output /secure/model-registry/regimpact-clause-v1
+  --output /secure/model-registry/regimpact-clause-v1 \
+  --base-model-revision IMMUTABLE_HUGGING_FACE_COMMIT \
+  --training-commit FULL_40_CHARACTER_GIT_SHA
 ```
 
-The manifest records the base model, exact dataset hash, label order, temperature, abstention
+The manifest records the base model and immutable revision, training commit, runtime packages,
+exact dataset hash, label order, temperature, abstention
 threshold, macro-F1, per-class inputs, calibration error, coverage, and accuracy on covered
 predictions. The training command exits with status `2` if the artifact fails promotion.
 

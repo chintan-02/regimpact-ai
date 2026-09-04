@@ -52,12 +52,36 @@ python scripts/train_clause_classifier.py \
   --dataset-audit /secure/clauses-v1-audit.json \
   --output /secure/model-registry/regimpact-clause-v1 \
   --base-model nlpaueb/legal-bert-base-uncased \
+  --base-model-revision IMMUTABLE_HUGGING_FACE_COMMIT \
+  --training-commit FULL_40_CHARACTER_GIT_SHA \
   --epochs 3 --seed 42
 ```
 
 The trainer uses document-isolated partitions, fits temperature scaling and the abstention threshold
-on validation data, and evaluates the test set once. Exit code `2` means the artifact was produced
-for analysis but failed at least one promotion gate.
+on validation data, and evaluates the test set once. It refuses a floating base-model revision or
+an abbreviated training commit, and records runtime/package provenance in the manifest. Exit code
+`2` means the artifact was produced for analysis but failed at least one promotion gate.
+
+## v0.6C real-corpus admission
+
+Before annotation, bind the approved source registry to the exact externally retained source bytes,
+human rights-review evidence, and extracted sections:
+
+```bash
+python scripts/execute_real_clause_corpus.py \
+  --sources /secure/source-registry.json \
+  --approvals /secure/source-approvals.json \
+  --artifact-root /secure/source-artifacts \
+  --sections /secure/sections.jsonl \
+  --candidates /secure/candidates.jsonl \
+  --receipt /secure/corpus-execution.json
+```
+
+The command refuses missing, extra or altered source artifacts and incomplete document extraction.
+Its receipt explicitly leaves model training unauthorized: only two-person annotation, independent
+adjudication and a successful v0.6A audit can authorize the v0.6B commands. The executable checklist
+and evidence templates live in
+[`datasets/clause-classifier/v0.6c`](../datasets/clause-classifier/v0.6c/README.md).
 
 ## Review and promotion
 

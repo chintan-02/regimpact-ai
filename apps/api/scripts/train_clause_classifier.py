@@ -7,8 +7,12 @@ evaluation and dataset-diversity gates all pass.
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
+import platform
+import re
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from regimpact.classifier_evaluation import ScoredPrediction, evaluate, select_abstention_threshold
@@ -25,6 +29,9 @@ LEARNING_RATE = 2e-5
 TRAIN_BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
 WEIGHT_DECAY = 0.01
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, required=True)
@@ -32,6 +39,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-audit", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-model", default="nlpaueb/legal-bert-base-uncased")
+    parser.add_argument("--base-model-revision", required=True)
+    parser.add_argument("--training-commit", required=True)
     parser.add_argument("--epochs", type=float, default=3.0)
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
@@ -39,6 +48,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if not _GIT_SHA.fullmatch(args.training_commit):
+        raise SystemExit("--training-commit must be a full lowercase commit SHA")
+    if not args.base_model_revision.strip() or args.base_model_revision == "main":
+        raise SystemExit("--base-model-revision must be an immutable model revision, not main")
+    started_at = datetime.now(UTC).isoformat()
     try:
         import numpy as np
         from datasets import Dataset
@@ -61,7 +75,9 @@ def main() -> int:
     split = split_by_document(bundle.rows, seed=f"{args.seed}:{args.dataset_id}")
     labels = tuple(ClauseLabel)
     label_to_id = {label: index for index, label in enumerate(labels)}
-    tokenizer = AutoTokenizer.from_pretrained(args.base_model)
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.base_model, revision=args.base_model_revision
+    )
 
     def make_dataset(rows):
         dataset = Dataset.from_dict(
@@ -77,6 +93,7 @@ def main() -> int:
     test_set = make_dataset(split.test)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.base_model,
+        revision=args.base_model_revision,
         num_labels=len(labels),
         id2label={index: label.value for index, label in enumerate(labels)},
         label2id={label.value: index for index, label in enumerate(labels)},
@@ -146,6 +163,7 @@ def main() -> int:
     summary = dataset_summary(bundle.rows)
     training_recipe = {
         "base_model": args.base_model,
+        "base_model_revision": args.base_model_revision,
         "dataset_sha256": bundle.sha256,
         "epochs": args.epochs,
         "eval_batch_size": EVAL_BATCH_SIZE,
@@ -154,6 +172,7 @@ def main() -> int:
         "split_strategy": "document-sha256-v1",
         "train_batch_size": TRAIN_BATCH_SIZE,
         "weight_decay": WEIGHT_DECAY,
+        "training_commit": args.training_commit,
     }
     recipe_sha256 = training_recipe_fingerprint(training_recipe)
     model_id = (
@@ -189,6 +208,16 @@ def main() -> int:
     payload["promoted"] = manifest.promoted
     payload["training_recipe"] = training_recipe
     payload["training_recipe_sha256"] = recipe_sha256
+    payload["execution"] = {
+        "started_at": started_at,
+        "completed_at": datetime.now(UTC).isoformat(),
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "packages": {
+            name: importlib.metadata.version(name)
+            for name in ("datasets", "numpy", "torch", "transformers")
+        },
+    }
     (args.output / "manifest.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
