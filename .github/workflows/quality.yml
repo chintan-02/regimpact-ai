@@ -51,6 +51,7 @@ jobs:
           tests/test_rights_review.py
           tests/test_xml_section_extraction.py
           tests/test_annotation_sampling.py
+          tests/test_annotation_workspace.py
           tests/test_classifier_training_governance.py
       - name: Validate classifier command contracts
         working-directory: apps/api
@@ -64,6 +65,7 @@ jobs:
           python scripts/prepare_annotation_pilot.py --help
           python scripts/report_annotation_pilot.py --help
           python scripts/export_annotation_pilot.py --help
+          python scripts/build_annotation_workspace.py --help
           python scripts/acquire_regulatory_corpus.py --validate-only \
             --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \
             --lock ../../datasets/clause-classifier/v0.6c/acquisition-lock.json \

@@ -16,6 +16,9 @@ from .clause_classifier import ClauseLabel
 
 SAMPLING_POLICY_VERSION = "regimpact-clause-pilot-v1"
 _STRATA = tuple(label.value for label in ClauseLabel)
+_AWARE_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})$"
+)
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "record_retention_requirement",
@@ -244,7 +247,7 @@ def sampling_report(
 
 
 def _aware_timestamp(value: object) -> bool:
-    if not isinstance(value, str):
+    if not isinstance(value, str) or _AWARE_TIMESTAMP.fullmatch(value) is None:
         return False
     try:
         return datetime.fromisoformat(value).tzinfo is not None
@@ -252,15 +255,109 @@ def _aware_timestamp(value: object) -> bool:
         return False
 
 
+def validate_annotation_package(
+    sample_path: Path, package_path: Path, *, expected_slot: str | None = None
+) -> dict[str, Any]:
+    """Verify one package against its immutable sample while allowing annotation fields."""
+    sample_document = json.loads(sample_path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(sample_document, dict)
+        or sample_document.get("schema_version") != "regimpact-sampled-clauses-v1"
+    ):
+        raise AnnotationSamplingError("unsupported sampled-clause schema")
+    records = sample_document.get("records")
+    if (
+        not isinstance(records, list)
+        or not records
+        or any(not isinstance(item, dict) for item in records)
+    ):
+        raise AnnotationSamplingError("sample must contain records")
+    by_id = {str(item.get("clause_id")): item for item in records}
+    if len(by_id) != len(records):
+        raise AnnotationSamplingError("sample contains duplicate clause IDs")
+
+    package = json.loads(package_path.read_text(encoding="utf-8"))
+    if not isinstance(package, dict):
+        raise AnnotationSamplingError("annotation package must be an object")
+    slot = package.get("annotator_slot")
+    sample_hash = sha256(_canonical(records).encode()).hexdigest()
+    if (
+        package.get("schema_version") != "regimpact-blinded-annotation-package-v1"
+        or slot not in {"A", "B"}
+        or (expected_slot is not None and slot != expected_slot)
+        or package.get("package_id") != f"v0.6c4-pilot-{str(slot).lower()}"
+        or package.get("sample_sha256") != sample_hash
+        or package.get("sampling_policy_version") != SAMPLING_POLICY_VERSION
+        or package.get("guideline_version") != GUIDELINE_VERSION
+        or package.get("allowed_labels") != list(_STRATA)
+        or re.fullmatch(r"[0-9a-f]{64}", str(package.get("candidate_queue_sha256"))) is None
+        or package.get("labels_visible_from_other_annotator") is not False
+        or package.get("model_training_authorized") is not False
+    ):
+        raise AnnotationSamplingError("annotation package metadata mismatch")
+    tasks = package.get("tasks")
+    if (
+        not isinstance(tasks, list)
+        or len(tasks) != len(records)
+        or any(not isinstance(item, dict) for item in tasks)
+    ):
+        raise AnnotationSamplingError("annotation package task coverage mismatch")
+    task_by_id = {str(item.get("clause_id")): item for item in tasks}
+    if set(task_by_id) != set(by_id) or len(task_by_id) != len(tasks):
+        raise AnnotationSamplingError("annotation package clause coverage mismatch")
+    immutable_fields = (
+        "clause_id",
+        "document_id",
+        "regulator",
+        "source_url",
+        "section_id",
+        "heading",
+        "page",
+        "text",
+        "text_sha256",
+    )
+    completed = 0
+    for clause_id, task in task_by_id.items():
+        source = by_id[clause_id]
+        if any(task.get(field) != source.get(field) for field in immutable_fields):
+            raise AnnotationSamplingError(f"annotation package task was modified: {clause_id}")
+        if task.get("guideline_version") != GUIDELINE_VERSION:
+            raise AnnotationSamplingError("annotation package guideline mismatch")
+        label = task.get("label")
+        annotated_at = task.get("annotated_at")
+        if not isinstance(task.get("notes"), str):
+            raise AnnotationSamplingError(f"annotation package notes must be text: {clause_id}")
+        if label is None and annotated_at is None:
+            continue
+        if label not in _STRATA or not _aware_timestamp(annotated_at):
+            raise AnnotationSamplingError(f"annotation package has incomplete task: {clause_id}")
+        completed += 1
+    annotator_id = package.get("annotator_id")
+    if annotator_id is not None and (
+        not isinstance(annotator_id, str) or not annotator_id.strip()
+    ):
+        raise AnnotationSamplingError("annotator ID must be non-empty text")
+    if completed and annotator_id is None:
+        raise AnnotationSamplingError("completed annotations require an annotator ID")
+    return package
+
+
 def annotation_progress_report(
     sample_path: Path, package_a_path: Path, package_b_path: Path
 ) -> dict[str, Any]:
     """Validate immutable tasks and report independent annotation progress/agreement."""
     sample_document = json.loads(sample_path.read_text(encoding="utf-8"))
-    if sample_document.get("schema_version") != "regimpact-sampled-clauses-v1":
+    if (
+        not isinstance(sample_document, dict)
+        or sample_document.get("schema_version") != "regimpact-sampled-clauses-v1"
+    ):
         raise AnnotationSamplingError("unsupported sampled-clause schema")
     records = sample_document.get("records")
-    if not isinstance(records, list) or not records:
+    if (
+        not isinstance(records, list)
+        or not records
+        or any(not isinstance(item, dict) for item in records)
+    ):
         raise AnnotationSamplingError("sample must contain records")
     by_id = {str(item.get("clause_id")): item for item in records}
     if len(by_id) != len(records):
@@ -284,15 +381,25 @@ def annotation_progress_report(
     for expected_slot, path in (("A", package_a_path), ("B", package_b_path)):
         package = json.loads(path.read_text(encoding="utf-8"))
         if (
-            package.get("schema_version") != "regimpact-blinded-annotation-package-v1"
+            not isinstance(package, dict)
+            or package.get("schema_version") != "regimpact-blinded-annotation-package-v1"
             or package.get("annotator_slot") != expected_slot
+            or package.get("package_id") != f"v0.6c4-pilot-{expected_slot.lower()}"
             or package.get("sample_sha256") != expected_sample_hash
+            or package.get("sampling_policy_version") != SAMPLING_POLICY_VERSION
             or package.get("guideline_version") != GUIDELINE_VERSION
+            or package.get("allowed_labels") != list(_STRATA)
+            or re.fullmatch(r"[0-9a-f]{64}", str(package.get("candidate_queue_sha256"))) is None
+            or package.get("labels_visible_from_other_annotator") is not False
             or package.get("model_training_authorized") is not False
         ):
             raise AnnotationSamplingError(f"package {expected_slot} metadata mismatch")
         tasks = package.get("tasks")
-        if not isinstance(tasks, list) or len(tasks) != len(records):
+        if (
+            not isinstance(tasks, list)
+            or len(tasks) != len(records)
+            or any(not isinstance(item, dict) for item in tasks)
+        ):
             raise AnnotationSamplingError(f"package {expected_slot} task coverage mismatch")
         task_by_id = {str(item.get("clause_id")): item for item in tasks}
         if set(task_by_id) != set(by_id) or len(task_by_id) != len(tasks):
@@ -309,6 +416,10 @@ def annotation_progress_report(
                 raise AnnotationSamplingError(f"package {expected_slot} guideline mismatch")
             label = task.get("label")
             annotated_at = task.get("annotated_at")
+            if not isinstance(task.get("notes"), str):
+                raise AnnotationSamplingError(
+                    f"package {expected_slot} notes must be text: {clause_id}"
+                )
             if label is None and annotated_at is None:
                 continue
             if label not in _STRATA or not _aware_timestamp(annotated_at):
@@ -325,6 +436,10 @@ def annotation_progress_report(
         label_counts[expected_slot] = counts
 
     identities = [packages[slot].get("annotator_id") for slot in ("A", "B")]
+    if packages["A"].get("candidate_queue_sha256") != packages["B"].get(
+        "candidate_queue_sha256"
+    ):
+        raise AnnotationSamplingError("annotation packages reference different candidate queues")
     if (
         all(isinstance(value, str) and value.strip() for value in identities)
         and identities[0] == identities[1]

@@ -159,3 +159,45 @@ PYTHONPATH=src python scripts/export_annotation_pilot.py \
 Export fails until every sampled clause has two complete annotations from different humans. The
 output contains exactly two governed `Annotation` records per clause and can be passed directly as
 the adjudication command's `--annotations` input.
+
+## v0.6C-5 secure offline annotation workspace
+
+Generate one self-contained HTML workspace for each blinded package. The builder first validates
+the complete package against the immutable pilot sample. The resulting file has no server, CDN,
+analytics or network API; progress stays in that browser's local storage until the annotator
+exports JSON. Its content-security policy disables connections, objects, forms and embedded
+resources. Source links are the only intentional navigation away from the file.
+
+```bash
+cd apps/api
+PYTHONPATH=src python scripts/build_annotation_workspace.py \
+  --sample "$REGIMPACT_CORPUS_ROOT/pilot-sample.json" \
+  --package "$REGIMPACT_CORPUS_ROOT/pilot-annotator-a.json" \
+  --output "$REGIMPACT_CORPUS_ROOT/pilot-annotator-a.html"
+
+PYTHONPATH=src python scripts/build_annotation_workspace.py \
+  --sample "$REGIMPACT_CORPUS_ROOT/pilot-sample.json" \
+  --package "$REGIMPACT_CORPUS_ROOT/pilot-annotator-b.json" \
+  --output "$REGIMPACT_CORPUS_ROOT/pilot-annotator-b.html"
+```
+
+Give workspace A only to human A and workspace B only to human B. Do not put either workspace or
+its exported progress in Git, email both packages to one reviewer, or use a shared cloud editor.
+Each reviewer enters a distinct assigned ID, labels independently, and regularly uses **Export
+progress JSON**. The workspace permits partial exports for safe checkpoints and validates any
+resumed file against the exact package, sample, candidate-queue fingerprint, policies, labels and
+immutable clause lineage.
+
+After receiving exports from both humans, validate them before any agreement calculation or
+adjudication export:
+
+```bash
+PYTHONPATH=src python scripts/report_annotation_pilot.py \
+  --sample "$REGIMPACT_CORPUS_ROOT/pilot-sample.json" \
+  --package-a "$REGIMPACT_CORPUS_ROOT/v0.6c4-pilot-a-progress.json" \
+  --package-b "$REGIMPACT_CORPUS_ROOT/v0.6c4-pilot-b-progress.json" \
+  --report "$REGIMPACT_CORPUS_ROOT/pilot-progress.json"
+```
+
+The Python validator remains authoritative. The browser is a convenience interface, not a way to
+bypass independent-human, complete-coverage, adjudication, dataset-audit or training gates.
