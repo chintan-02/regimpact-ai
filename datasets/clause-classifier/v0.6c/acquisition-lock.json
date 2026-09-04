@@ -1,0 +1,164 @@
+{
+  "schema_version": "regimpact-corpus-acquisition-v1",
+  "status": "acquired_pending_rights_review",
+  "acquired_at": "2026-09-04T15:34:00.256787+00:00",
+  "documents": 25,
+  "regulators": 5,
+  "repository": "justicecanada/laws-lois-xml",
+  "repository_commit": "a782c13dbf0c710f33d8b2adc3e42377c94d0626",
+  "human_rights_review_required": true,
+  "training_authorized": false,
+  "artifacts": [
+    {
+      "source_id": "osfi-osfi-act",
+      "document_id": "O-2.7",
+      "artifact_sha256": "fd2427acb78a8d388bbca275ac89b96777dde8b4c82b638e7e11067503d61748",
+      "artifact_size_bytes": 104613
+    },
+    {
+      "source_id": "osfi-bank-act",
+      "document_id": "B-1.01",
+      "artifact_sha256": "1573c5ba3ed1b5d5529cfcc40251dfa3fa49658a841cb178afaef44ccb81c844",
+      "artifact_size_bytes": 3379502
+    },
+    {
+      "source_id": "osfi-trust-loan-companies-act",
+      "document_id": "T-19.8",
+      "artifact_sha256": "a107dfb52f0b5246d24038b174e48844b947760c2ffc730e42476d98ac04b708",
+      "artifact_size_bytes": 1475082
+    },
+    {
+      "source_id": "osfi-cooperative-credit-associations-act",
+      "document_id": "C-41.01",
+      "artifact_sha256": "3ac2c2afb092953a266e805221abb7ad2eadf4ba1c62de86451f460083d010a9",
+      "artifact_size_bytes": 1278086
+    },
+    {
+      "source_id": "osfi-insurance-companies-act",
+      "document_id": "I-11.8",
+      "artifact_sha256": "78608ee4979666ceb3df53b30b8d8b6a94b276ca50850b3cd6c325b7aefe59e3",
+      "artifact_size_bytes": 2951903
+    },
+    {
+      "source_id": "osfi-pension-benefits-standards-act",
+      "document_id": "P-7.01",
+      "artifact_sha256": "9b8d004e0fb8deaf19c6b7e8a5682ff4541ead409dc9ecde82ea1c65a85627c6",
+      "artifact_size_bytes": 369103
+    },
+    {
+      "source_id": "osfi-pooled-registered-pension-plans-act",
+      "document_id": "P-15.3",
+      "artifact_sha256": "3809562a531f8c5aba94ed5e8225ac3f9dcb88e47cbd96366b16da8ed23e4e7f",
+      "artifact_size_bytes": 179197
+    },
+    {
+      "source_id": "fintrac-pcmltfa",
+      "document_id": "P-24.501",
+      "artifact_sha256": "354ea7c94e0bdc995c41365c664aaa0af085934ea6263451a38ee745999feab8",
+      "artifact_size_bytes": 674219
+    },
+    {
+      "source_id": "fintrac-pcmltf-regulations",
+      "document_id": "SOR-2002-184",
+      "artifact_sha256": "70cd748a111d6a5ff8368152736ad608ddcddcbdb9eef6efeae51d2c2b58de30",
+      "artifact_size_bytes": 818748
+    },
+    {
+      "source_id": "fintrac-suspicious-transaction-reporting-regulations",
+      "document_id": "SOR-2001-317",
+      "artifact_sha256": "ae981bed08e802ee5668aeb1ff2e85f993b618da31d437dbd45ce0c41319e744",
+      "artifact_size_bytes": 118848
+    },
+    {
+      "source_id": "fintrac-cross-border-currency-regulations",
+      "document_id": "SOR-2002-412",
+      "artifact_sha256": "35d0c7ee949f8fac62732b13b31c7743248d793bf4b26b32fca721c32f478014",
+      "artifact_size_bytes": 69522
+    },
+    {
+      "source_id": "fintrac-registration-regulations",
+      "document_id": "SOR-2007-121",
+      "artifact_sha256": "9069313d5197e3fb8f16cba16051be5063e24a471d52ce2d6f84ef32e7c4e234",
+      "artifact_size_bytes": 51870
+    },
+    {
+      "source_id": "fintrac-amp-regulations",
+      "document_id": "SOR-2007-292",
+      "artifact_sha256": "9f86c1a1d0d135fe768be146e2d42a9a776584bb5b3669e21811db3614afc0fc",
+      "artifact_size_bytes": 87126
+    },
+    {
+      "source_id": "opc-pipeda",
+      "document_id": "P-8.6",
+      "artifact_sha256": "4ffd5d846583ed3322b4de5819d97bd2e2f0c28fe50832e005946cb79c0f3ca3",
+      "artifact_size_bytes": 243218
+    },
+    {
+      "source_id": "opc-privacy-act",
+      "document_id": "P-21",
+      "artifact_sha256": "0907294f18c87ff288b46612fe9640f394442414f588f32ed45bc2d499ee6b75",
+      "artifact_size_bytes": 259615
+    },
+    {
+      "source_id": "opc-breach-safeguards-regulations",
+      "document_id": "SOR-2018-64",
+      "artifact_sha256": "30329b1de7e57efd13c130be3cf4921ce894cb2a9404101a62f824506f2479c7",
+      "artifact_size_bytes": 12566
+    },
+    {
+      "source_id": "opc-publicly-available-information-regulations",
+      "document_id": "SOR-2001-7",
+      "artifact_sha256": "9af71d04fe3b52404b7693a56b342230fbf2ffc08c1da98b9df6b74da16c0c29",
+      "artifact_size_bytes": 5113
+    },
+    {
+      "source_id": "competition-bureau-competition-act",
+      "document_id": "C-34",
+      "artifact_sha256": "fc6c5f3a0760be1de2825ae337f7edc5650f8d781d89d004a296682378f996ae",
+      "artifact_size_bytes": 699951
+    },
+    {
+      "source_id": "competition-bureau-consumer-packaging-labelling-act",
+      "document_id": "C-38",
+      "artifact_sha256": "9e9d3369f0d4f66c7254327f16a7c8266637324e968ac4f128429795dcf2f735",
+      "artifact_size_bytes": 64346
+    },
+    {
+      "source_id": "competition-bureau-precious-metals-marking-act",
+      "document_id": "P-9.01",
+      "artifact_sha256": "be0120c49e738a73362182e8a0d79f50f4fdb935efab02db4676c27fd8f746eb",
+      "artifact_size_bytes": 313804
+    },
+    {
+      "source_id": "competition-bureau-textile-labelling-act",
+      "document_id": "T-10",
+      "artifact_sha256": "bab4287507414795d520af1e197018cbb5ba08cc57c4d9854bd0c0cba40c15ba",
+      "artifact_size_bytes": 44481
+    },
+    {
+      "source_id": "health-canada-food-drugs-act",
+      "document_id": "F-27",
+      "artifact_sha256": "a8d4f5f28b767201a6d0192b65d2aca63fecda46f0b55dbfa7017913ca655cc7",
+      "artifact_size_bytes": 296494
+    },
+    {
+      "source_id": "health-canada-cannabis-act",
+      "document_id": "C-24.5",
+      "artifact_sha256": "143a6ff4eec4e50dc3e5a4f369f7e52f884dc582ad2ba3406253ab6ac300b4f3",
+      "artifact_size_bytes": 436222
+    },
+    {
+      "source_id": "health-canada-controlled-drugs-substances-act",
+      "document_id": "C-38.8",
+      "artifact_sha256": "e9f0f2d4003ea50a21bef964af7a2ec8c896e4940ca5aa2d1b504eace2932337",
+      "artifact_size_bytes": 423915
+    },
+    {
+      "source_id": "health-canada-tobacco-vaping-products-act",
+      "document_id": "T-11.5",
+      "artifact_sha256": "229cc566b9a982e60eec2d958a102154c3bc33372f0fc54d6eb090f74d5b6332",
+      "artifact_size_bytes": 248584
+    }
+  ]
+}
+

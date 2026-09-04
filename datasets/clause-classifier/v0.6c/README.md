@@ -19,3 +19,41 @@ The milestone is complete only when all of the following are true:
 
 No empty template, synthetic fixture, candidate queue, notebook execution or unreviewed model may
 be described as genuine model training completion.
+
+## v0.6C-1 corpus assembly
+
+`corpus-manifest.json` selects exactly 25 English federal Acts and regulations across five
+regulatory portfolios: OSFI, FINTRAC, the Office of the Privacy Commissioner, the Competition
+Bureau and Health Canada. Every artifact URL is bound to Justice Canada's official XML repository
+at commit `a782c13dbf0c710f33d8b2adc3e42377c94d0626`.
+
+`acquisition-lock.json` proves that all 25 immutable XML files were retrieved on 2026-09-04. It
+records the exact byte size and SHA-256 of each artifact without checking raw legal text into Git.
+Its status is deliberately `acquired_pending_rights_review`: acquisition is not legal approval,
+annotation completion or permission to train.
+
+Validate the checked-in manifest:
+
+```bash
+cd apps/api
+python scripts/acquire_regulatory_corpus.py \
+  --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \
+  --lock ../../datasets/clause-classifier/v0.6c/acquisition-lock.json \
+  --output-dir /tmp/regimpact-corpus \
+  --receipt /tmp/regimpact-corpus-receipt.json \
+  --validate-only
+```
+
+Acquire a fresh local copy into a new, empty external directory:
+
+```bash
+cd apps/api
+python scripts/acquire_regulatory_corpus.py \
+  --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \
+  --output-dir "$REGIMPACT_CORPUS_ROOT/raw" \
+  --receipt "$REGIMPACT_CORPUS_ROOT/acquisition-receipt.json"
+```
+
+Before using these files, a named reviewer must verify the Open Government Licence and the
+Reproduction of Federal Law Order, then create source approvals using
+`source-approval-template.json`. The software never promotes `review_required` automatically.
