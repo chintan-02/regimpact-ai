@@ -49,6 +49,7 @@ jobs:
           tests/test_corpus_acquisition.py
           tests/test_corpus_execution.py
           tests/test_rights_review.py
+          tests/test_xml_section_extraction.py
           tests/test_classifier_training_governance.py
       - name: Validate classifier command contracts
         working-directory: apps/api
@@ -58,6 +59,7 @@ jobs:
           python scripts/prepare_clause_annotation_queue.py --help
           python scripts/acquire_regulatory_corpus.py --help
           python scripts/review_corpus_rights.py --help
+          python scripts/extract_regulatory_sections.py --help
           python scripts/acquire_regulatory_corpus.py --validate-only \
             --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \
             --lock ../../datasets/clause-classifier/v0.6c/acquisition-lock.json \
