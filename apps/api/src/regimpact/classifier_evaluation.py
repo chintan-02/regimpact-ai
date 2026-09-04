@@ -23,6 +23,7 @@ class EvaluationReport:
     confidence_threshold: float
     coverage: float
     covered_accuracy: float
+    confusion_matrix: dict[ClauseLabel, dict[ClauseLabel, int]]
 
 
 def _safe_divide(numerator: float, denominator: float) -> float:
@@ -75,6 +76,16 @@ def evaluate(
     correct = sum(item.expected == item.predicted for item in predictions)
     covered = tuple(item for item in predictions if item.confidence >= confidence_threshold)
     covered_correct = sum(item.expected == item.predicted for item in covered)
+    confusion_matrix = {
+        expected: {
+            predicted: sum(
+                item.expected == expected and item.predicted == predicted
+                for item in predictions
+            )
+            for predicted in labels
+        }
+        for expected in labels
+    }
     return EvaluationReport(
         macro_f1=sum(f1_values) / len(f1_values),
         per_class=per_class,
@@ -83,6 +94,7 @@ def evaluate(
         confidence_threshold=confidence_threshold,
         coverage=len(covered) / len(predictions),
         covered_accuracy=_safe_divide(covered_correct, len(covered)),
+        confusion_matrix=confusion_matrix,
     )
 
 

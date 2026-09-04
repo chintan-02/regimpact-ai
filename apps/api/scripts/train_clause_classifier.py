@@ -12,6 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from regimpact.classifier_evaluation import ScoredPrediction, evaluate, select_abstention_threshold
+from regimpact.classifier_training_governance import load_ready_dataset_audit
 from regimpact.clause_classifier import (
     ClauseLabel,
     ModelManifest,
@@ -28,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--dataset-id", required=True)
+    parser.add_argument("--dataset-audit", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-model", default="nlpaueb/legal-bert-base-uncased")
     parser.add_argument("--epochs", type=float, default=3.0)
@@ -51,6 +53,11 @@ def main() -> int:
         raise SystemExit("install the API 'ml' extra before training") from exc
 
     bundle = load_jsonl(args.dataset, dataset_id=args.dataset_id)
+    load_ready_dataset_audit(
+        args.dataset_audit,
+        dataset_id=bundle.dataset_id,
+        dataset_sha256=bundle.sha256,
+    )
     split = split_by_document(bundle.rows, seed=f"{args.seed}:{args.dataset_id}")
     labels = tuple(ClauseLabel)
     label_to_id = {label: index for index, label in enumerate(labels)}
@@ -184,6 +191,33 @@ def main() -> int:
     payload["training_recipe_sha256"] = recipe_sha256
     (args.output / "manifest.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    evaluation = {
+        "model_id": model_id,
+        "dataset_id": bundle.dataset_id,
+        "dataset_sha256": bundle.sha256,
+        "split_seed": f"{args.seed}:{args.dataset_id}",
+        "split_examples": {
+            "train": len(split.train),
+            "validation": len(split.validation),
+            "test": len(split.test),
+        },
+        "accuracy": test_report.accuracy,
+        "macro_f1": test_report.macro_f1,
+        "per_class": {
+            label.value: metrics for label, metrics in test_report.per_class.items()
+        },
+        "confusion_matrix": {
+            expected.value: {predicted.value: count for predicted, count in values.items()}
+            for expected, values in test_report.confusion_matrix.items()
+        },
+        "expected_calibration_error": test_report.expected_calibration_error,
+        "confidence_threshold": threshold,
+        "coverage": test_report.coverage,
+        "covered_accuracy": test_report.covered_accuracy,
+    }
+    (args.output / "evaluation.json").write_text(
+        json.dumps(evaluation, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0 if manifest.promoted else 2

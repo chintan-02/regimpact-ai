@@ -59,7 +59,9 @@ cd apps/api
 pip install -e '.[ml]'
 python scripts/evaluate_clause_baseline.py \
   --dataset /path/to/clauses-v1.jsonl \
-  --dataset-id clauses-v1
+  --dataset-id clauses-v1 \
+  --dataset-audit /path/to/clauses-v1-audit.json \
+  --output /path/to/clauses-v1-tfidf.json
 ```
 
 The transformer experiment fine-tunes a legal-domain encoder, estimates a validation-set
@@ -70,12 +72,19 @@ reports the final metrics once on the isolated test set:
 python scripts/train_clause_classifier.py \
   --dataset /path/to/clauses-v1.jsonl \
   --dataset-id clauses-v1 \
+  --dataset-audit /path/to/clauses-v1-audit.json \
   --output /secure/model-registry/regimpact-clause-v1
 ```
 
 The manifest records the base model, exact dataset hash, label order, temperature, abstention
 threshold, macro-F1, per-class inputs, calibration error, coverage, and accuracy on covered
 predictions. The training command exits with status `2` if the artifact fails promotion.
+
+Training refuses to begin unless the independently generated v0.6A audit is ready and matches the
+dataset ID and fingerprint. A qualifying manifest is still not sufficient for serving: an
+authorized reviewer must create `promotion.json`, which binds the audit, manifest, artifact hash,
+training commit, approver, and timestamp. Runtime loading fails closed without that receipt or after
+artifact changes. See the [v0.6B runbook](clause-classifier-training-runbook.md).
 
 ## Promotion policy
 

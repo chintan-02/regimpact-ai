@@ -35,6 +35,7 @@ def main() -> None:
             adjudicated_count=args.adjudicated_count,
         )
     )
+    result["dataset_id"] = args.dataset_id
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     failures = "None" if not result["failures"] else ", ".join(result["failures"])
