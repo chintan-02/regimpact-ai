@@ -125,7 +125,7 @@ The current release deliberately favors explainable, testable components for hig
 | Sentence-transformer embeddings and hybrid retrieval | Implemented |
 | Evaluated deterministic obligation extraction | Implemented |
 | Persisted policy-gated workflow with human approval | Implemented |
-| Fine-tuned regulatory-clause classifier | v0.6C-1 has assembled and hash-locked 25 official documents across five regulatory portfolios; rights review, human annotation and genuine training remain required before promotion |
+| Fine-tuned regulatory-clause classifier | v0.6C-1 assembled and hash-locked 25 official documents; v0.6C-2 provides fail-closed human rights-review controls, while approval, annotation and genuine training remain required |
 | LangGraph orchestration | **Planned for v0.7; not currently implemented** |
 | AKS/Kubernetes runtime | **Planned for v1.0; not currently implemented** |
 
@@ -233,7 +233,7 @@ The verified v0.5.0 release additionally passed authenticated OIDC deployment, c
 | **v0.5.1** | **Documentation, final evidence alignment, and portfolio presentation** |
 | v0.6A | Dataset construction, dual-annotation, adjudication, deduplication, and audit contracts |
 | v0.6B | Audited-dataset admission, baselines, encoder training, calibration, evaluation, and artifact-promotion contracts |
-| **v0.6C** | **In progress: 25-document corpus assembled and hash-locked; rights review, genuine human labels, reproducible training, evaluation, and reviewed promotion remain** |
+| **v0.6C** | **In progress: corpus assembled; human rights-review workflow implemented; source approval, genuine labels, reproducible training, evaluation, and reviewed promotion remain** |
 | v0.7 | LangGraph orchestration with persisted state, node-level retries, policy gates, and human interruption |
 | v0.8 | Backup, restore, rollback, failure-injection, and reliability exercises |
 | v1.0 | AKS, Helm, autoscaling, production identity/networking, and Kubernetes recovery validation |
@@ -260,6 +260,7 @@ For v0.6C, no regulatory text is admitted until source-use approval and immutabl
 - [v0.6C real-corpus execution workspace](datasets/clause-classifier/v0.6c/README.md)
 - [v0.6C-1 governed 25-document manifest](datasets/clause-classifier/v0.6c/corpus-manifest.json)
 - [v0.6C-1 acquisition hash lock](datasets/clause-classifier/v0.6c/acquisition-lock.json)
+- [v0.6C-2 rights-review runbook](docs/corpus-rights-review-runbook.md)
 - [Classifier model-card template](docs/model-card-clause-classifier-template.md)
 - [Analyst review workflow](docs/analyst-review-workflow.md)
 
