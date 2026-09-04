@@ -1,0 +1,756 @@
+{
+  "instructions": "A named human must review each source and replace pending fields. This file is evidence collection, not legal advice.",
+  "records": [
+    {
+      "artifact_path": "osfi-osfi-act.xml",
+      "artifact_sha256": "fd2427acb78a8d388bbca275ac89b96777dde8b4c82b638e7e11067503d61748",
+      "artifact_size_bytes": 104613,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/O-2.7.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "O-2.7",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/O-2.7/index.html",
+      "portfolio_basis_url": "https://www.osfi-bsif.gc.ca/en/guidance/acts-regulations",
+      "rationale": "",
+      "regulator": "Office of the Superintendent of Financial Institutions",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "osfi-osfi-act",
+      "title": "Office of the Superintendent of Financial Institutions Act"
+    },
+    {
+      "artifact_path": "osfi-bank-act.xml",
+      "artifact_sha256": "1573c5ba3ed1b5d5529cfcc40251dfa3fa49658a841cb178afaef44ccb81c844",
+      "artifact_size_bytes": 3379502,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/B-1.01.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "B-1.01",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/B-1.01/index.html",
+      "portfolio_basis_url": "https://www.osfi-bsif.gc.ca/en/guidance/acts-regulations",
+      "rationale": "",
+      "regulator": "Office of the Superintendent of Financial Institutions",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "osfi-bank-act",
+      "title": "Bank Act"
+    },
+    {
+      "artifact_path": "osfi-trust-loan-companies-act.xml",
+      "artifact_sha256": "a107dfb52f0b5246d24038b174e48844b947760c2ffc730e42476d98ac04b708",
+      "artifact_size_bytes": 1475082,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/T-19.8.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "T-19.8",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/T-19.8/index.html",
+      "portfolio_basis_url": "https://www.osfi-bsif.gc.ca/en/guidance/acts-regulations",
+      "rationale": "",
+      "regulator": "Office of the Superintendent of Financial Institutions",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "osfi-trust-loan-companies-act",
+      "title": "Trust and Loan Companies Act"
+    },
+    {
+      "artifact_path": "osfi-cooperative-credit-associations-act.xml",
+      "artifact_sha256": "3ac2c2afb092953a266e805221abb7ad2eadf4ba1c62de86451f460083d010a9",
+      "artifact_size_bytes": 1278086,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/C-41.01.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "C-41.01",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/C-41.01/index.html",
+      "portfolio_basis_url": "https://www.osfi-bsif.gc.ca/en/guidance/acts-regulations",
+      "rationale": "",
+      "regulator": "Office of the Superintendent of Financial Institutions",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "osfi-cooperative-credit-associations-act",
+      "title": "Cooperative Credit Associations Act"
+    },
+    {
+      "artifact_path": "osfi-insurance-companies-act.xml",
+      "artifact_sha256": "78608ee4979666ceb3df53b30b8d8b6a94b276ca50850b3cd6c325b7aefe59e3",
+      "artifact_size_bytes": 2951903,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/I-11.8.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "I-11.8",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/I-11.8/index.html",
+      "portfolio_basis_url": "https://www.osfi-bsif.gc.ca/en/guidance/acts-regulations",
+      "rationale": "",
+      "regulator": "Office of the Superintendent of Financial Institutions",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "osfi-insurance-companies-act",
+      "title": "Insurance Companies Act"
+    },
+    {
+      "artifact_path": "osfi-pension-benefits-standards-act.xml",
+      "artifact_sha256": "9b8d004e0fb8deaf19c6b7e8a5682ff4541ead409dc9ecde82ea1c65a85627c6",
+      "artifact_size_bytes": 369103,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/P-7.01.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "P-7.01",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/P-7.01/index.html",
+      "portfolio_basis_url": "https://www.osfi-bsif.gc.ca/en/guidance/acts-regulations",
+      "rationale": "",
+      "regulator": "Office of the Superintendent of Financial Institutions",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "osfi-pension-benefits-standards-act",
+      "title": "Pension Benefits Standards Act, 1985"
+    },
+    {
+      "artifact_path": "osfi-pooled-registered-pension-plans-act.xml",
+      "artifact_sha256": "3809562a531f8c5aba94ed5e8225ac3f9dcb88e47cbd96366b16da8ed23e4e7f",
+      "artifact_size_bytes": 179197,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/P-15.3.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "P-15.3",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/P-15.3/index.html",
+      "portfolio_basis_url": "https://www.osfi-bsif.gc.ca/en/guidance/acts-regulations",
+      "rationale": "",
+      "regulator": "Office of the Superintendent of Financial Institutions",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "osfi-pooled-registered-pension-plans-act",
+      "title": "Pooled Registered Pension Plans Act"
+    },
+    {
+      "artifact_path": "fintrac-pcmltfa.xml",
+      "artifact_sha256": "354ea7c94e0bdc995c41365c664aaa0af085934ea6263451a38ee745999feab8",
+      "artifact_size_bytes": 674219,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/P-24.501.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "P-24.501",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/P-24.501/index.html",
+      "portfolio_basis_url": "https://fintrac-canafe.canada.ca/act-loi/1-eng",
+      "rationale": "",
+      "regulator": "Financial Transactions and Reports Analysis Centre of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "fintrac-pcmltfa",
+      "title": "Proceeds of Crime (Money Laundering) and Terrorist Financing Act"
+    },
+    {
+      "artifact_path": "fintrac-pcmltf-regulations.xml",
+      "artifact_sha256": "70cd748a111d6a5ff8368152736ad608ddcddcbdb9eef6efeae51d2c2b58de30",
+      "artifact_size_bytes": 818748,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/regulations/SOR-2002-184.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "SOR-2002-184",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-184/index.html",
+      "portfolio_basis_url": "https://fintrac-canafe.canada.ca/act-loi/1-eng",
+      "rationale": "",
+      "regulator": "Financial Transactions and Reports Analysis Centre of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "fintrac-pcmltf-regulations",
+      "title": "Proceeds of Crime (Money Laundering) and Terrorist Financing Regulations"
+    },
+    {
+      "artifact_path": "fintrac-suspicious-transaction-reporting-regulations.xml",
+      "artifact_sha256": "ae981bed08e802ee5668aeb1ff2e85f993b618da31d437dbd45ce0c41319e744",
+      "artifact_size_bytes": 118848,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/regulations/SOR-2001-317.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "SOR-2001-317",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2001-317/index.html",
+      "portfolio_basis_url": "https://fintrac-canafe.canada.ca/act-loi/1-eng",
+      "rationale": "",
+      "regulator": "Financial Transactions and Reports Analysis Centre of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "fintrac-suspicious-transaction-reporting-regulations",
+      "title": "Proceeds of Crime (Money Laundering) and Terrorist Financing Suspicious Transaction Reporting Regulations"
+    },
+    {
+      "artifact_path": "fintrac-cross-border-currency-regulations.xml",
+      "artifact_sha256": "35d0c7ee949f8fac62732b13b31c7743248d793bf4b26b32fca721c32f478014",
+      "artifact_size_bytes": 69522,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/regulations/SOR-2002-412.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "SOR-2002-412",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-412/index.html",
+      "portfolio_basis_url": "https://fintrac-canafe.canada.ca/act-loi/1-eng",
+      "rationale": "",
+      "regulator": "Financial Transactions and Reports Analysis Centre of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "fintrac-cross-border-currency-regulations",
+      "title": "Cross-border Currency and Monetary Instruments Reporting Regulations"
+    },
+    {
+      "artifact_path": "fintrac-registration-regulations.xml",
+      "artifact_sha256": "9069313d5197e3fb8f16cba16051be5063e24a471d52ce2d6f84ef32e7c4e234",
+      "artifact_size_bytes": 51870,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/regulations/SOR-2007-121.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "SOR-2007-121",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2007-121/index.html",
+      "portfolio_basis_url": "https://fintrac-canafe.canada.ca/act-loi/1-eng",
+      "rationale": "",
+      "regulator": "Financial Transactions and Reports Analysis Centre of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "fintrac-registration-regulations",
+      "title": "Proceeds of Crime (Money Laundering) and Terrorist Financing Registration Regulations"
+    },
+    {
+      "artifact_path": "fintrac-amp-regulations.xml",
+      "artifact_sha256": "9f86c1a1d0d135fe768be146e2d42a9a776584bb5b3669e21811db3614afc0fc",
+      "artifact_size_bytes": 87126,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/regulations/SOR-2007-292.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "SOR-2007-292",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2007-292/index.html",
+      "portfolio_basis_url": "https://fintrac-canafe.canada.ca/act-loi/1-eng",
+      "rationale": "",
+      "regulator": "Financial Transactions and Reports Analysis Centre of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "fintrac-amp-regulations",
+      "title": "Proceeds of Crime (Money Laundering) and Terrorist Financing Administrative Monetary Penalties Regulations"
+    },
+    {
+      "artifact_path": "opc-pipeda.xml",
+      "artifact_sha256": "4ffd5d846583ed3322b4de5819d97bd2e2f0c28fe50832e005946cb79c0f3ca3",
+      "artifact_size_bytes": 243218,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/P-8.6.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "P-8.6",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/P-8.6/index.html",
+      "portfolio_basis_url": "https://www.priv.gc.ca/en/privacy-topics/privacy-laws-in-canada/",
+      "rationale": "",
+      "regulator": "Office of the Privacy Commissioner of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "opc-pipeda",
+      "title": "Personal Information Protection and Electronic Documents Act"
+    },
+    {
+      "artifact_path": "opc-privacy-act.xml",
+      "artifact_sha256": "0907294f18c87ff288b46612fe9640f394442414f588f32ed45bc2d499ee6b75",
+      "artifact_size_bytes": 259615,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/P-21.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "P-21",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/P-21/index.html",
+      "portfolio_basis_url": "https://www.priv.gc.ca/en/privacy-topics/privacy-laws-in-canada/",
+      "rationale": "",
+      "regulator": "Office of the Privacy Commissioner of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "opc-privacy-act",
+      "title": "Privacy Act"
+    },
+    {
+      "artifact_path": "opc-breach-safeguards-regulations.xml",
+      "artifact_sha256": "30329b1de7e57efd13c130be3cf4921ce894cb2a9404101a62f824506f2479c7",
+      "artifact_size_bytes": 12566,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/regulations/SOR-2018-64.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "SOR-2018-64",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2018-64/index.html",
+      "portfolio_basis_url": "https://www.priv.gc.ca/en/privacy-topics/privacy-laws-in-canada/",
+      "rationale": "",
+      "regulator": "Office of the Privacy Commissioner of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "opc-breach-safeguards-regulations",
+      "title": "Breach of Security Safeguards Regulations"
+    },
+    {
+      "artifact_path": "opc-publicly-available-information-regulations.xml",
+      "artifact_sha256": "9af71d04fe3b52404b7693a56b342230fbf2ffc08c1da98b9df6b74da16c0c29",
+      "artifact_size_bytes": 5113,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/regulations/SOR-2001-7.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "SOR-2001-7",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2001-7/index.html",
+      "portfolio_basis_url": "https://www.priv.gc.ca/en/privacy-topics/privacy-laws-in-canada/",
+      "rationale": "",
+      "regulator": "Office of the Privacy Commissioner of Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "opc-publicly-available-information-regulations",
+      "title": "Regulations Specifying Publicly Available Information"
+    },
+    {
+      "artifact_path": "competition-bureau-competition-act.xml",
+      "artifact_sha256": "fc6c5f3a0760be1de2825ae337f7edc5650f8d781d89d004a296682378f996ae",
+      "artifact_size_bytes": 699951,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/C-34.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "C-34",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/C-34/index.html",
+      "portfolio_basis_url": "https://competition-bureau.canada.ca/en/how-we-foster-competition/our-organization/our-mandate",
+      "rationale": "",
+      "regulator": "Competition Bureau Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "competition-bureau-competition-act",
+      "title": "Competition Act"
+    },
+    {
+      "artifact_path": "competition-bureau-consumer-packaging-labelling-act.xml",
+      "artifact_sha256": "9e9d3369f0d4f66c7254327f16a7c8266637324e968ac4f128429795dcf2f735",
+      "artifact_size_bytes": 64346,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/C-38.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "C-38",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/C-38/index.html",
+      "portfolio_basis_url": "https://competition-bureau.canada.ca/en/how-we-foster-competition/our-organization/our-mandate",
+      "rationale": "",
+      "regulator": "Competition Bureau Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "competition-bureau-consumer-packaging-labelling-act",
+      "title": "Consumer Packaging and Labelling Act"
+    },
+    {
+      "artifact_path": "competition-bureau-precious-metals-marking-act.xml",
+      "artifact_sha256": "be0120c49e738a73362182e8a0d79f50f4fdb935efab02db4676c27fd8f746eb",
+      "artifact_size_bytes": 313804,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/P-9.01.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "P-9.01",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/P-9.01/index.html",
+      "portfolio_basis_url": "https://competition-bureau.canada.ca/en/how-we-foster-competition/our-organization/our-mandate",
+      "rationale": "",
+      "regulator": "Competition Bureau Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "competition-bureau-precious-metals-marking-act",
+      "title": "Precious Metals Marking Act"
+    },
+    {
+      "artifact_path": "competition-bureau-textile-labelling-act.xml",
+      "artifact_sha256": "bab4287507414795d520af1e197018cbb5ba08cc57c4d9854bd0c0cba40c15ba",
+      "artifact_size_bytes": 44481,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/T-10.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "T-10",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/T-10/index.html",
+      "portfolio_basis_url": "https://competition-bureau.canada.ca/en/how-we-foster-competition/our-organization/our-mandate",
+      "rationale": "",
+      "regulator": "Competition Bureau Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "competition-bureau-textile-labelling-act",
+      "title": "Textile Labelling Act"
+    },
+    {
+      "artifact_path": "health-canada-food-drugs-act.xml",
+      "artifact_sha256": "a8d4f5f28b767201a6d0192b65d2aca63fecda46f0b55dbfa7017913ca655cc7",
+      "artifact_size_bytes": 296494,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/F-27.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "F-27",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/F-27/index.html",
+      "portfolio_basis_url": "https://www.canada.ca/en/health-canada/corporate/about-health-canada/legislation-guidelines/acts-regulations/list-acts-regulations.html",
+      "rationale": "",
+      "regulator": "Health Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "health-canada-food-drugs-act",
+      "title": "Food and Drugs Act"
+    },
+    {
+      "artifact_path": "health-canada-cannabis-act.xml",
+      "artifact_sha256": "143a6ff4eec4e50dc3e5a4f369f7e52f884dc582ad2ba3406253ab6ac300b4f3",
+      "artifact_size_bytes": 436222,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/C-24.5.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "C-24.5",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/C-24.5/index.html",
+      "portfolio_basis_url": "https://www.canada.ca/en/health-canada/corporate/about-health-canada/legislation-guidelines/acts-regulations/list-acts-regulations.html",
+      "rationale": "",
+      "regulator": "Health Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "health-canada-cannabis-act",
+      "title": "Cannabis Act"
+    },
+    {
+      "artifact_path": "health-canada-controlled-drugs-substances-act.xml",
+      "artifact_sha256": "e9f0f2d4003ea50a21bef964af7a2ec8c896e4940ca5aa2d1b504eace2932337",
+      "artifact_size_bytes": 423915,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/C-38.8.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "C-38.8",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/C-38.8/index.html",
+      "portfolio_basis_url": "https://www.canada.ca/en/health-canada/corporate/about-health-canada/legislation-guidelines/acts-regulations/list-acts-regulations.html",
+      "rationale": "",
+      "regulator": "Health Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "health-canada-controlled-drugs-substances-act",
+      "title": "Controlled Drugs and Substances Act"
+    },
+    {
+      "artifact_path": "health-canada-tobacco-vaping-products-act.xml",
+      "artifact_sha256": "229cc566b9a982e60eec2d958a102154c3bc33372f0fc54d6eb090f74d5b6332",
+      "artifact_size_bytes": 248584,
+      "artifact_url": "https://raw.githubusercontent.com/justicecanada/laws-lois-xml/a782c13dbf0c710f33d8b2adc3e42377c94d0626/eng/acts/T-11.5.xml",
+      "checks": {
+        "accuracy_disclaimer_confirmed": false,
+        "attribution_plan_confirmed": false,
+        "authoritative_source_confirmed": false,
+        "licence_scope_reviewed": false,
+        "no_official_status_claim_confirmed": false,
+        "portfolio_assignment_confirmed": false
+      },
+      "decision": "pending",
+      "document_id": "T-11.5",
+      "official_url": "https://laws-lois.justice.gc.ca/eng/acts/T-11.5/index.html",
+      "portfolio_basis_url": "https://www.canada.ca/en/health-canada/corporate/about-health-canada/legislation-guidelines/acts-regulations/list-acts-regulations.html",
+      "rationale": "",
+      "regulator": "Health Canada",
+      "reviewed_at": "",
+      "reviewer_name": "",
+      "rights_basis_urls": [
+        "https://open.canada.ca/en/open-government-licence-canada",
+        "https://laws-lois.justice.gc.ca/eng/regulations/si-97-5/",
+        "https://laws-lois.justice.gc.ca/eng/faq/",
+        "https://github.com/justicecanada/laws-lois-xml/blob/a782c13dbf0c710f33d8b2adc3e42377c94d0626/LICENSE.md"
+      ],
+      "source_id": "health-canada-tobacco-vaping-products-act",
+      "title": "Tobacco and Vaping Products Act"
+    }
+  ],
+  "schema_version": "regimpact-rights-review-v1"
+}

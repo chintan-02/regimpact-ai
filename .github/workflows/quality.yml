@@ -48,6 +48,7 @@ jobs:
           tests/test_clause_annotations.py
           tests/test_corpus_acquisition.py
           tests/test_corpus_execution.py
+          tests/test_rights_review.py
           tests/test_classifier_training_governance.py
       - name: Validate classifier command contracts
         working-directory: apps/api
@@ -56,11 +57,17 @@ jobs:
           python scripts/train_clause_classifier.py --help
           python scripts/prepare_clause_annotation_queue.py --help
           python scripts/acquire_regulatory_corpus.py --help
+          python scripts/review_corpus_rights.py --help
           python scripts/acquire_regulatory_corpus.py --validate-only \
             --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \
             --lock ../../datasets/clause-classifier/v0.6c/acquisition-lock.json \
             --output-dir /tmp/unused-corpus \
             --receipt /tmp/unused-receipt.json
+          python scripts/review_corpus_rights.py validate \
+            --require-pending \
+            --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \
+            --lock ../../datasets/clause-classifier/v0.6c/acquisition-lock.json \
+            --review ../../datasets/clause-classifier/v0.6c/rights-review-packet.json
           python scripts/execute_real_clause_corpus.py --help
           python scripts/adjudicate_clause_dataset.py --help
           python scripts/audit_clause_dataset.py --help

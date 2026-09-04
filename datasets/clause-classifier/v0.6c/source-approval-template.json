@@ -2,7 +2,7 @@
   {
     "source_id": "replace-with-source-id",
     "document_id": "replace-with-document-version-id",
-    "artifact_path": "relative/path/from/artifact-root.pdf",
+    "artifact_path": "relative/path/from/artifact-root.xml",
     "artifact_sha256": "replace-with-64-lowercase-hex-characters",
     "rights_basis_url": "https://official.example/reuse-terms",
     "rights_reviewer": "replace-with-human-reviewer-id",

@@ -57,3 +57,14 @@ python scripts/acquire_regulatory_corpus.py \
 Before using these files, a named reviewer must verify the Open Government Licence and the
 Reproduction of Federal Law Order, then create source approvals using
 `source-approval-template.json`. The software never promotes `review_required` automatically.
+
+## v0.6C-2 rights review
+
+`rights-review-packet.json` is the generated 25-record reviewer packet. It is intentionally checked
+in with every decision set to `pending`, no reviewer identity, and all checks false. Follow the
+[rights-review runbook](../../../docs/corpus-rights-review-runbook.md) to complete it manually and
+use `review_corpus_rights.py` to validate or finalize the evidence.
+
+Finalization produces the approved source registry and source-approval contract required by the
+existing real-corpus execution command. It authorizes XML extraction and human annotation only;
+the dataset audit and separate promotion controls still gate genuine model training.
