@@ -1,0 +1,9 @@
+raw/
+working/
+exports/
+*.pdf
+*.html
+*.docx
+training.jsonl
+lineage.jsonl
+unresolved.jsonl

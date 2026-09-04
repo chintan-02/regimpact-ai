@@ -1,0 +1,43 @@
+{
+  "sources": [
+    {
+      "source_id": "aer-directive-060-2026-bulletin",
+      "document_id": "aer-directive-060-2026",
+      "regulator": "Alberta Energy Regulator",
+      "jurisdiction": "CA-AB",
+      "title": "Directive 060 update bulletin",
+      "version": "2026",
+      "source_url": "https://www.aer.ca/regulating-development/rules-and-directives/directives/directive-060",
+      "rights_status": "review_required",
+      "rights_basis": "",
+      "retrieved_at": null,
+      "content_sha256": ""
+    },
+    {
+      "source_id": "osfi-guideline-b13",
+      "document_id": "osfi-b13-current",
+      "regulator": "Office of the Superintendent of Financial Institutions",
+      "jurisdiction": "CA",
+      "title": "Guideline B-13: Technology and Cyber Risk Management",
+      "version": "current",
+      "source_url": "https://www.osfi-bsif.gc.ca/en/guidance/guidance-library/technology-cyber-risk-management-guideline-b-13",
+      "rights_status": "review_required",
+      "rights_basis": "",
+      "retrieved_at": null,
+      "content_sha256": ""
+    },
+    {
+      "source_id": "fintrac-suspicious-transactions",
+      "document_id": "fintrac-str-current",
+      "regulator": "Financial Transactions and Reports Analysis Centre of Canada",
+      "jurisdiction": "CA",
+      "title": "Reporting suspicious transactions to FINTRAC",
+      "version": "current",
+      "source_url": "https://fintrac-canafe.canada.ca/guidance-directives/transaction-operation/str-dod/str-dod-eng",
+      "rights_status": "review_required",
+      "rights_basis": "",
+      "retrieved_at": null,
+      "content_sha256": ""
+    }
+  ]
+}
