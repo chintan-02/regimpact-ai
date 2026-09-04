@@ -46,6 +46,7 @@ jobs:
           tests/test_clause_classifier.py
           tests/test_clause_classification_service.py
           tests/test_clause_annotations.py
+          tests/test_corpus_execution.py
           tests/test_classifier_training_governance.py
       - name: Validate classifier command contracts
         working-directory: apps/api
@@ -53,6 +54,7 @@ jobs:
           python scripts/evaluate_clause_baseline.py --help
           python scripts/train_clause_classifier.py --help
           python scripts/prepare_clause_annotation_queue.py --help
+          python scripts/execute_real_clause_corpus.py --help
           python scripts/adjudicate_clause_dataset.py --help
           python scripts/audit_clause_dataset.py --help
           python scripts/promote_clause_classifier.py --help

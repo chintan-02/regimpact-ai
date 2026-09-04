@@ -1,0 +1,11 @@
+[
+  {
+    "source_id": "replace-with-source-id",
+    "document_id": "replace-with-document-version-id",
+    "artifact_path": "relative/path/from/artifact-root.pdf",
+    "artifact_sha256": "replace-with-64-lowercase-hex-characters",
+    "rights_basis_url": "https://official.example/reuse-terms",
+    "rights_reviewer": "replace-with-human-reviewer-id",
+    "rights_reviewed_at": "2026-09-04T00:00:00+00:00"
+  }
+]

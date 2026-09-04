@@ -125,7 +125,7 @@ The current release deliberately favors explainable, testable components for hig
 | Sentence-transformer embeddings and hybrid retrieval | Implemented |
 | Evaluated deterministic obligation extraction | Implemented |
 | Persisted policy-gated workflow with human approval | Implemented |
-| Fine-tuned regulatory-clause classifier | v0.6A dataset construction and annotation controls are active; training/evaluation code exists, but no artifact is promoted without a qualifying corpus |
+| Fine-tuned regulatory-clause classifier | v0.6C real-corpus execution controls are active; training/evaluation code exists, but no genuine artifact is claimed or promoted without qualifying human-adjudicated data |
 | LangGraph orchestration | **Planned for v0.7; not currently implemented** |
 | AKS/Kubernetes runtime | **Planned for v1.0; not currently implemented** |
 
@@ -231,13 +231,14 @@ The verified v0.5.0 release additionally passed authenticated OIDC deployment, c
 | v0.4.1 | Responsive navigation and production-safe demo account selection |
 | v0.5.0 | Verified Azure staging deployment and operational hardening |
 | **v0.5.1** | **Documentation, final evidence alignment, and portfolio presentation** |
-| **v0.6A** | **In progress: rights-reviewed sources, lineage-preserving extraction, dual annotation, adjudication, deduplication, and dataset audit** |
-| **v0.6B** | **In progress: audited-dataset admission, baselines, encoder fine-tuning, calibration, abstention, evaluation, and tamper-evident artifact promotion** |
+| v0.6A | Dataset construction, dual-annotation, adjudication, deduplication, and audit contracts |
+| v0.6B | Audited-dataset admission, baselines, encoder training, calibration, evaluation, and artifact-promotion contracts |
+| **v0.6C** | **In progress: real-source execution, genuine human-labelled corpus, reproducible training run, evaluation, and reviewed model promotion** |
 | v0.7 | LangGraph orchestration with persisted state, node-level retries, policy gates, and human interruption |
 | v0.8 | Backup, restore, rollback, failure-injection, and reliability exercises |
 | v1.0 | AKS, Helm, autoscaling, production identity/networking, and Kubernetes recovery validation |
 
-For v0.6A, no regulatory text is admitted until source-use approval and immutable provenance are recorded; every accepted label requires two independent annotations or third-reviewer adjudication. v0.6B will use document-isolated train/validation/test splits, deterministic and classical baselines, per-class metrics, macro-F1, calibration, confidence thresholds, and human review for abstentions. For v0.7, LangGraph will coordinate steps while the deterministic policy engine remains the authority boundary.
+For v0.6C, no regulatory text is admitted until source-use approval and immutable provenance are recorded; every accepted label requires two independent annotations or third-reviewer adjudication. Genuine training uses document-isolated train/validation/test splits, deterministic and classical baselines, per-class metrics, macro-F1, calibration, confidence thresholds, and human review for abstentions. For v0.7, LangGraph will coordinate steps while the deterministic policy engine remains the authority boundary.
 
 ## Project links
 
@@ -256,6 +257,7 @@ For v0.6A, no regulatory text is admitted until source-use approval and immutabl
 - [v0.6A dataset workspace](datasets/clause-classifier/v0.6a/README.md)
 - [v0.6B training and promotion runbook](docs/clause-classifier-training-runbook.md)
 - [v0.6B reproducible notebook](notebooks/v0.6b-clause-classifier.ipynb)
+- [v0.6C real-corpus execution workspace](datasets/clause-classifier/v0.6c/README.md)
 - [Classifier model-card template](docs/model-card-clause-classifier-template.md)
 - [Analyst review workflow](docs/analyst-review-workflow.md)
 
