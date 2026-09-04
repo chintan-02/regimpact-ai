@@ -132,3 +132,16 @@ It validates contracts, splitting, metrics, lineage, abstention, and failure beh
 the dataset-size promotion gates by design. A model becomes portfolio-claimable as “fine-tuned and
 evaluated” only after a separately reviewed corpus produces a promoted manifest and reproducible
 evaluation report.
+
+## v0.6A dataset construction
+
+The governed corpus workflow is implemented separately from model training. It registers candidate
+sources and blocks retrieval until rights approval, preserves source-artifact and clause hashes,
+builds stable annotation candidates, requires two independent labels, routes disagreements to an
+independent adjudicator, and audits diversity, lineage, document-isolated splits, unresolved items,
+and cross-document duplicates. See the [annotation guidelines](clause-annotation-guidelines.md) and
+[dataset workspace](../datasets/clause-classifier/v0.6a/README.md).
+
+The repository does not check in regulatory source text or claim a completed corpus. The initial
+three official source candidates remain `review_required`; this is an explicit release gate rather
+than a synthetic-data shortcut.

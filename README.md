@@ -125,7 +125,7 @@ The current release deliberately favors explainable, testable components for hig
 | Sentence-transformer embeddings and hybrid retrieval | Implemented |
 | Evaluated deterministic obligation extraction | Implemented |
 | Persisted policy-gated workflow with human approval | Implemented |
-| Fine-tuned regulatory-clause classifier | v0.6 training, evaluation, abstention, lineage, and fail-closed serving path implemented; no artifact promoted without a qualifying corpus |
+| Fine-tuned regulatory-clause classifier | v0.6A dataset construction and annotation controls are active; training/evaluation code exists, but no artifact is promoted without a qualifying corpus |
 | LangGraph orchestration | **Planned for v0.7; not currently implemented** |
 | AKS/Kubernetes runtime | **Planned for v1.0; not currently implemented** |
 
@@ -231,12 +231,13 @@ The verified v0.5.0 release additionally passed authenticated OIDC deployment, c
 | v0.4.1 | Responsive navigation and production-safe demo account selection |
 | v0.5.0 | Verified Azure staging deployment and operational hardening |
 | **v0.5.1** | **Documentation, final evidence alignment, and portfolio presentation** |
-| **v0.6** | **In progress: governed fine-tuning, document-isolated evaluation, calibration, abstention, prediction lineage, and promotion gates** |
+| **v0.6A** | **In progress: rights-reviewed sources, lineage-preserving extraction, dual annotation, adjudication, deduplication, and dataset audit** |
+| **v0.6B** | **Fine-tuning, document-isolated evaluation, calibration, abstention, prediction lineage, and artifact promotion** |
 | v0.7 | LangGraph orchestration with persisted state, node-level retries, policy gates, and human interruption |
 | v0.8 | Backup, restore, rollback, failure-injection, and reliability exercises |
 | v1.0 | AKS, Helm, autoscaling, production identity/networking, and Kubernetes recovery validation |
 
-For v0.6, evaluation will use document-isolated train/validation/test splits, deterministic and classical baselines, per-class metrics, macro-F1, calibration, confidence thresholds, and human review for abstentions. For v0.7, LangGraph will coordinate steps while the deterministic policy engine remains the authority boundary.
+For v0.6A, no regulatory text is admitted until source-use approval and immutable provenance are recorded; every accepted label requires two independent annotations or third-reviewer adjudication. v0.6B will use document-isolated train/validation/test splits, deterministic and classical baselines, per-class metrics, macro-F1, calibration, confidence thresholds, and human review for abstentions. For v0.7, LangGraph will coordinate steps while the deterministic policy engine remains the authority boundary.
 
 ## Project links
 
@@ -251,6 +252,8 @@ For v0.6, evaluation will use document-isolated train/validation/test splits, de
 - [Observability](docs/observability.md)
 - [Hybrid retrieval](docs/hybrid-retrieval.md)
 - [Regulatory-clause classifier](docs/clause-classifier.md)
+- [Clause annotation guidelines](docs/clause-annotation-guidelines.md)
+- [v0.6A dataset workspace](datasets/clause-classifier/v0.6a/README.md)
 - [Classifier model-card template](docs/model-card-clause-classifier-template.md)
 - [Analyst review workflow](docs/analyst-review-workflow.md)
 
