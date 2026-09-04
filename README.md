@@ -232,7 +232,7 @@ The verified v0.5.0 release additionally passed authenticated OIDC deployment, c
 | v0.5.0 | Verified Azure staging deployment and operational hardening |
 | **v0.5.1** | **Documentation, final evidence alignment, and portfolio presentation** |
 | **v0.6A** | **In progress: rights-reviewed sources, lineage-preserving extraction, dual annotation, adjudication, deduplication, and dataset audit** |
-| **v0.6B** | **Fine-tuning, document-isolated evaluation, calibration, abstention, prediction lineage, and artifact promotion** |
+| **v0.6B** | **In progress: audited-dataset admission, baselines, encoder fine-tuning, calibration, abstention, evaluation, and tamper-evident artifact promotion** |
 | v0.7 | LangGraph orchestration with persisted state, node-level retries, policy gates, and human interruption |
 | v0.8 | Backup, restore, rollback, failure-injection, and reliability exercises |
 | v1.0 | AKS, Helm, autoscaling, production identity/networking, and Kubernetes recovery validation |
@@ -254,6 +254,8 @@ For v0.6A, no regulatory text is admitted until source-use approval and immutabl
 - [Regulatory-clause classifier](docs/clause-classifier.md)
 - [Clause annotation guidelines](docs/clause-annotation-guidelines.md)
 - [v0.6A dataset workspace](datasets/clause-classifier/v0.6a/README.md)
+- [v0.6B training and promotion runbook](docs/clause-classifier-training-runbook.md)
+- [v0.6B reproducible notebook](notebooks/v0.6b-clause-classifier.ipynb)
 - [Classifier model-card template](docs/model-card-clause-classifier-template.md)
 - [Analyst review workflow](docs/analyst-review-workflow.md)
 

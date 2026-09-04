@@ -10,6 +10,7 @@ from regimpact.classifier_evaluation import (
     select_abstention_threshold,
 )
 from regimpact.classifier_runtime import TransformerClauseClassifier, UnpromotedModelError
+from regimpact.classifier_training_governance import promote_artifact
 from regimpact.clause_classifier import (
     ClauseLabel,
     ModelManifest,
@@ -79,6 +80,7 @@ def test_evaluation_reports_all_classes_and_selective_accuracy():
     assert report.coverage == pytest.approx(0.875)
     assert report.covered_accuracy == 1.0
     assert set(report.per_class) == set(ClauseLabel)
+    assert report.confusion_matrix[ClauseLabel.OBLIGATION][ClauseLabel.NON_OBLIGATION] == 1
     threshold = select_abstention_threshold(
         predictions, minimum_covered_accuracy=1.0, minimum_coverage=0.75
     )
@@ -169,6 +171,27 @@ def test_promoted_runtime_preserves_model_and_dataset_lineage(tmp_path):
         "coverage": manifest.coverage,
     }
     (tmp_path / "manifest.json").write_text(json.dumps(payload), encoding="utf-8")
+    audit_path = tmp_path / "dataset-audit.json"
+    audit_path.write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "failures": [],
+                "dataset_id": manifest.dataset_id,
+                "dataset_sha256": manifest.dataset_sha256,
+                "unresolved_count": 0,
+                "examples": manifest.example_count,
+            }
+        ),
+        encoding="utf-8",
+    )
+    promote_artifact(
+        tmp_path,
+        dataset_audit_path=audit_path,
+        approver="model-risk-reviewer",
+        approved_at="2026-09-04T00:00:00+00:00",
+        training_commit="a" * 40,
+    )
 
     def factory(*args, **kwargs):
         return lambda text, truncation: [[

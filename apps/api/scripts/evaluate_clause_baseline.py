@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from regimpact.classifier_evaluation import ScoredPrediction, evaluate
+from regimpact.classifier_training_governance import load_ready_dataset_audit
 from regimpact.clause_classifier import ClauseLabel
 from regimpact.clause_dataset import load_jsonl, split_by_document
 
@@ -15,6 +16,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--dataset-id", required=True)
+    parser.add_argument("--dataset-audit", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--seed", default="regimpact-v0.6-baseline")
     parser.add_argument("--confidence-threshold", type=float, default=0.80)
     return parser.parse_args()
@@ -30,6 +33,11 @@ def main() -> int:
         raise SystemExit("install the API 'ml' extra before baseline evaluation") from exc
 
     bundle = load_jsonl(args.dataset, dataset_id=args.dataset_id)
+    load_ready_dataset_audit(
+        args.dataset_audit,
+        dataset_id=bundle.dataset_id,
+        dataset_sha256=bundle.sha256,
+    )
     split = split_by_document(bundle.rows, seed=args.seed)
     train_labels = {row.label for row in split.train}
     missing = set(ClauseLabel) - train_labels
@@ -79,7 +87,13 @@ def main() -> int:
         "per_class": {
             label.value: metrics for label, metrics in report.per_class.items()
         },
+        "confusion_matrix": {
+            expected.value: {predicted.value: count for predicted, count in values.items()}
+            for expected, values in report.confusion_matrix.items()
+        },
     }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 

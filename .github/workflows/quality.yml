@@ -46,6 +46,7 @@ jobs:
           tests/test_clause_classifier.py
           tests/test_clause_classification_service.py
           tests/test_clause_annotations.py
+          tests/test_classifier_training_governance.py
       - name: Validate classifier command contracts
         working-directory: apps/api
         run: |
@@ -54,6 +55,7 @@ jobs:
           python scripts/prepare_clause_annotation_queue.py --help
           python scripts/adjudicate_clause_dataset.py --help
           python scripts/audit_clause_dataset.py --help
+          python scripts/promote_clause_classifier.py --help
 
   api-postgres-integration:
     runs-on: ubuntu-latest

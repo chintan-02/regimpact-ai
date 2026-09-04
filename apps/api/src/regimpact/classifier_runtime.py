@@ -58,6 +58,12 @@ class TransformerClauseClassifier:
         failures = self.manifest.promotion_failures(policy)
         if failures:
             raise UnpromotedModelError("model failed promotion gates: " + ", ".join(failures))
+        from .classifier_training_governance import verify_promotion_receipt
+
+        try:
+            verify_promotion_receipt(artifact_dir)
+        except RuntimeError as exc:
+            raise UnpromotedModelError(str(exc)) from exc
         if pipeline_factory is None:
             try:
                 from transformers import pipeline  # type: ignore[import-not-found]
