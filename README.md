@@ -233,7 +233,7 @@ The verified v0.5.0 release additionally passed authenticated OIDC deployment, c
 | **v0.5.1** | **Documentation, final evidence alignment, and portfolio presentation** |
 | v0.6A | Dataset construction, dual-annotation, adjudication, deduplication, and audit contracts |
 | v0.6B | Audited-dataset admission, baselines, encoder training, calibration, evaluation, and artifact-promotion contracts |
-| **v0.6C** | **In progress: corpus assembled; human rights-review workflow implemented; source approval, genuine labels, reproducible training, evaluation, and reviewed promotion remain** |
+| **v0.6C** | **In progress: corpus assembled; rights-review and approved-XML extraction controls implemented; human approval, genuine labels, training, evaluation, and reviewed promotion remain** |
 | v0.7 | LangGraph orchestration with persisted state, node-level retries, policy gates, and human interruption |
 | v0.8 | Backup, restore, rollback, failure-injection, and reliability exercises |
 | v1.0 | AKS, Helm, autoscaling, production identity/networking, and Kubernetes recovery validation |

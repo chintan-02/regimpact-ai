@@ -68,3 +68,37 @@ use `review_corpus_rights.py` to validate or finalize the evidence.
 Finalization produces the approved source registry and source-approval contract required by the
 existing real-corpus execution command. It authorizes XML extraction and human annotation only;
 the dataset audit and separate promotion controls still gate genuine model training.
+
+## v0.6C-3 XML extraction and annotation queue
+
+After a named human has finalized all 25 source decisions, extract stable operative sections from
+the exact hash-approved XML bytes. The extractor reads only top-level sections in each document's
+`Body`, preserves document/section/heading lineage, excludes labels, marginal notes from clause
+text, historical notes, footnotes, repealed markers and coming-into-force metadata, and refuses
+malformed or empty documents. Justice Canada XML has no page coordinates, so `page` is explicitly
+`null`; the official URL plus document and section identifiers provide the source locator.
+
+```bash
+cd apps/api
+python scripts/extract_regulatory_sections.py \
+  --sources "$REGIMPACT_CORPUS_ROOT/approved-source-registry.json" \
+  --approvals "$REGIMPACT_CORPUS_ROOT/source-approvals.json" \
+  --artifact-root "$REGIMPACT_CORPUS_ROOT/raw" \
+  --sections "$REGIMPACT_CORPUS_ROOT/sections.jsonl" \
+  --receipt "$REGIMPACT_CORPUS_ROOT/section-extraction-receipt.json"
+
+python scripts/execute_real_clause_corpus.py \
+  --sources "$REGIMPACT_CORPUS_ROOT/approved-source-registry.json" \
+  --approvals "$REGIMPACT_CORPUS_ROOT/source-approvals.json" \
+  --artifact-root "$REGIMPACT_CORPUS_ROOT/raw" \
+  --sections "$REGIMPACT_CORPUS_ROOT/sections.jsonl" \
+  --candidates "$REGIMPACT_CORPUS_ROOT/candidates.jsonl" \
+  --receipt "$REGIMPACT_CORPUS_ROOT/candidate-queue-receipt.json"
+```
+
+Both commands re-verify approval coverage and every raw-file SHA-256. Candidate IDs are stable
+functions of document, section, sentence position and normalized text. The receipts retain
+per-document section counts and hashes while explicitly keeping model training unauthorized.
+
+Do not run either command against the checked-in pending review packet. Do not bulk-approve the
+packet, and do not commit raw XML, extracted legal text, candidate queues or reviewer identities.
