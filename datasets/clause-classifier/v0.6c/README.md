@@ -102,3 +102,45 @@ per-document section counts and hashes while explicitly keeping model training u
 
 Do not run either command against the checked-in pending review packet. Do not bulk-approve the
 packet, and do not commit raw XML, extracted legal text, candidate queues or reviewer identities.
+
+## v0.6C-4 deterministic pilot sampling
+
+The complete candidate queue is an extraction artifact, not a practical request to label every
+clause. Build a 350-clause pilot that covers all 25 documents and uses transparent lexical strata
+to enrich likely examples of the seven taxonomy classes. Strata affect selection only; they are
+never written into the annotators' tasks as suggested or ground-truth labels.
+
+```bash
+cd apps/api
+PYTHONPATH=src python scripts/prepare_annotation_pilot.py \
+  --candidates "$REGIMPACT_CORPUS_ROOT/candidates.jsonl" \
+  --queue-receipt "$REGIMPACT_CORPUS_ROOT/candidate-queue-receipt.json" \
+  --sample "$REGIMPACT_CORPUS_ROOT/pilot-sample.json" \
+  --package-a "$REGIMPACT_CORPUS_ROOT/pilot-annotator-a.json" \
+  --package-b "$REGIMPACT_CORPUS_ROOT/pilot-annotator-b.json" \
+  --report "$REGIMPACT_CORPUS_ROOT/pilot-sampling-report.json" \
+  --target 350 \
+  --seed v0.6c4-pilot-v1
+```
+
+The command verifies the exact 13,370-candidate fingerprint before sampling. Packages A and B
+contain the same clause IDs in independently deterministic orders, no prefilled labels and no
+annotator identity. Give each file to a different human and never disclose one person's labels to
+the other before both are complete. Each annotator sets the package-level `annotator_id` and fills
+`label` plus a timezone-aware `annotated_at` for each task without modifying source fields.
+
+Check progress or agreement at any time:
+
+```bash
+PYTHONPATH=src python scripts/report_annotation_pilot.py \
+  --sample "$REGIMPACT_CORPUS_ROOT/pilot-sample.json" \
+  --package-a "$REGIMPACT_CORPUS_ROOT/pilot-annotator-a.json" \
+  --package-b "$REGIMPACT_CORPUS_ROOT/pilot-annotator-b.json" \
+  --report "$REGIMPACT_CORPUS_ROOT/pilot-progress.json"
+```
+
+The validator rejects changed text/lineage, incomplete label/timestamp pairs, duplicate human
+identities and obsolete guidelines. When both packages are complete it reports raw agreement and
+the exact disagreements requiring an independent third reviewer. Heuristic balance does not prove
+final class balance; adjudicate the pilot, inspect actual labels, and construct a targeted second
+batch before attempting the 500-example dataset gate.
