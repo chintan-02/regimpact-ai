@@ -8,6 +8,11 @@ on:
         required: true
         type: choice
         options: [staging]
+      keep_staging_online:
+        description: Keep staging workloads warm after deployment (costs money)
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -134,19 +139,27 @@ jobs:
           done
           exit 1
 
-      - name: Promote migrated workloads
+      - name: Finalize staging runtime mode
         env:
           REGISTRY: ${{ steps.foundation.outputs.registry }}
+          KEEP_STAGING_ONLINE: ${{ inputs.keep_staging_online }}
         run: |
+          MIN_REPLICAS=0
+          if [ "$KEEP_STAGING_ONLINE" = "true" ]; then
+            MIN_REPLICAS=1
+          fi
+
           az deployment group create \
             --name "promotion-${GITHUB_RUN_ID}" \
             --resource-group "$RESOURCE_GROUP" \
             --template-file infra/main.bicep \
-            --parameters "$PARAM_FILE" deployWorkloads=true applicationMinReplicas=1 \
+            --parameters "$PARAM_FILE" deployWorkloads=true applicationMinReplicas="$MIN_REPLICAS" \
               apiImage="$REGISTRY.azurecr.io/regimpact-api:$IMAGE_TAG" \
               webImage="$REGISTRY.azurecr.io/regimpact-web:$IMAGE_TAG" \
               postgresAdminPassword="${{ secrets.POSTGRES_ADMIN_PASSWORD }}" \
               jwtSecret="${{ secrets.REGIMPACT_JWT_SECRET }}"
+
+          echo "STAGING_MIN_REPLICAS=$MIN_REPLICAS" >> "$GITHUB_ENV"
 
       - name: Verify deployed health
         env:
@@ -175,3 +188,9 @@ jobs:
           echo "- API (internal): ${{ steps.application.outputs.api_url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Web: ${{ steps.application.outputs.web_url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Image tag: $IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Minimum replicas after deployment: $STAGING_MIN_REPLICAS" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$STAGING_MIN_REPLICAS" = "0" ]; then
+            echo "- Cost mode: scale-to-zero application workloads. Managed PostgreSQL, Redis, ACR and observability resources can still incur charges." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Cost mode: warm staging explicitly enabled; continuous compute charges are expected." >> "$GITHUB_STEP_SUMMARY"
+          fi
