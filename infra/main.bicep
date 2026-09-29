@@ -11,6 +11,7 @@ param deployWorkloads bool = true
 @minValue(0)
 @maxValue(1)
 param applicationMinReplicas int = 1
+param enableContainerLogs bool = true
 @secure()
 param postgresAdminPassword string
 @secure()
@@ -212,11 +213,11 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   tags: resourceTags
   properties: {
     appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
+      destination: enableContainerLogs ? 'log-analytics' : 'none'
+      logAnalyticsConfiguration: enableContainerLogs ? {
         customerId: logs.properties.customerId
         sharedKey: logs.listKeys().primarySharedKey
-      }
+      } : null
     }
   }
 }
@@ -330,53 +331,65 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = if (deployWorkloads) 
   dependsOn: [blobRole, vaultRole, acrRole]
 }
 
-resource dispatcher 'Microsoft.App/containerApps@2024-03-01' = if (deployWorkloads) {
+resource dispatcherJob 'Microsoft.App/jobs@2024-03-01' = if (deployWorkloads) {
   name: '${baseName}-dispatcher'
   location: location
   tags: resourceTags
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${identity.id}': {} } }
   properties: {
-    managedEnvironmentId: containerEnvironment.id
+    environmentId: containerEnvironment.id
     configuration: {
-      activeRevisionsMode: 'Single'
+      triggerType: 'Schedule'
+      replicaTimeout: 300
+      replicaRetryLimit: 1
       registries: [{ server: registry.properties.loginServer, identity: identity.id }]
       secrets: commonSecrets
+      scheduleTriggerConfig: {
+        cronExpression: '* * * * *'
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
     }
     template: {
       containers: [{
         name: 'dispatcher'
         image: apiImage
-        command: ['python', '-m', 'regimpact.dispatcher']
+        command: ['python', '-m', 'regimpact.dispatcher', '--once']
         env: commonEnv
         resources: { cpu: json('0.25'), memory: '0.5Gi' }
       }]
-      scale: { minReplicas: applicationMinReplicas, maxReplicas: 1 }
     }
   }
   dependsOn: [vaultRole, acrRole]
 }
 
-resource scheduler 'Microsoft.App/containerApps@2024-03-01' = if (deployWorkloads) {
+resource schedulerJob 'Microsoft.App/jobs@2024-03-01' = if (deployWorkloads) {
   name: '${baseName}-scheduler'
   location: location
   tags: resourceTags
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${identity.id}': {} } }
   properties: {
-    managedEnvironmentId: containerEnvironment.id
+    environmentId: containerEnvironment.id
     configuration: {
-      activeRevisionsMode: 'Single'
+      triggerType: 'Schedule'
+      replicaTimeout: 300
+      replicaRetryLimit: 1
       registries: [{ server: registry.properties.loginServer, identity: identity.id }]
       secrets: commonSecrets
+      scheduleTriggerConfig: {
+        cronExpression: '*/15 * * * *'
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
     }
     template: {
       containers: [{
         name: 'scheduler'
         image: apiImage
-        command: ['python', '-m', 'regimpact.scheduler']
+        command: ['python', '-m', 'regimpact.scheduler', '--once']
         env: commonEnv
         resources: { cpu: json('0.25'), memory: '0.5Gi' }
       }]
-      scale: { minReplicas: applicationMinReplicas, maxReplicas: 1 }
     }
   }
   dependsOn: [vaultRole, acrRole]
@@ -414,6 +427,8 @@ output registryName string = registry.name
 output apiUrl string = deployWorkloads ? 'https://${api!.properties.configuration.ingress.fqdn}' : ''
 output webUrl string = deployWorkloads ? 'https://${web!.properties.configuration.ingress.fqdn}' : ''
 output migrationJobName string = deployWorkloads ? migrationJob!.name : ''
+output dispatcherJobName string = deployWorkloads ? dispatcherJob!.name : ''
+output schedulerJobName string = deployWorkloads ? schedulerJob!.name : ''
 output keyVaultName string = vault.name
 output logAnalyticsWorkspaceId string = logs.id
 output applicationInsightsName string = insights.name
