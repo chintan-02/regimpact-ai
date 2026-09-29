@@ -13,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: regimpact-staging-destroy
+  group: regimpact-staging
   cancel-in-progress: false
 
 jobs:
@@ -25,10 +25,12 @@ jobs:
     steps:
       - name: Verify destructive-action confirmation
         shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
           expected="DELETE-${RESOURCE_GROUP}"
-          if [ "${{ inputs.confirmation }}" != "$expected" ]; then
+          if [ "$CONFIRMATION" != "$expected" ]; then
             echo "Confirmation mismatch. Expected: $expected" >&2
             exit 1
           fi
