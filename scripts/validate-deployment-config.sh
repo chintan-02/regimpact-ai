@@ -26,6 +26,8 @@ grep -q "APPLICATIONINSIGHTS_CONNECTION_STRING" infra/main.bicep
 grep -q "/api/platform/readiness" infra/main.bicep
 grep -q "deployment-evidence" .github/workflows/deploy-azure.yml
 grep -q 'options: \[staging\]' .github/workflows/deploy-azure.yml
+grep -q 'keep_staging_online:' .github/workflows/deploy-azure.yml
+grep -q 'param applicationMinReplicas = 0' infra/staging.bicepparam
 grep -q 'resourceGroups/${resource_group}' scripts/bootstrap-azure-oidc.sh
 grep -q 'Role Based Access Control Administrator' scripts/bootstrap-azure-oidc.sh
 
