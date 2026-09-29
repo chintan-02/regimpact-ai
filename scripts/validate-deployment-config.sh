@@ -28,6 +28,12 @@ grep -q "/api/platform/readiness" infra/main.bicep
 grep -q "deployment-evidence" .github/workflows/deploy-azure.yml
 grep -q 'options: \[staging\]' .github/workflows/deploy-azure.yml
 grep -q 'keep_staging_online:' .github/workflows/deploy-azure.yml
+grep -q "resource dispatcherJob 'Microsoft.App/jobs" infra/main.bicep
+grep -q "resource schedulerJob 'Microsoft.App/jobs" infra/main.bicep
+grep -q "cronExpression: '\*/15 \* \* \* \*'" infra/main.bicep
+grep -q "command: \['python', '-m', 'regimpact.dispatcher', '--once'\]" infra/main.bicep
+grep -q "command: \['python', '-m', 'regimpact.scheduler', '--once'\]" infra/main.bicep
+grep -q 'param enableContainerLogs = false' infra/staging.bicepparam
 grep -q 'Delete staging after validation' .github/workflows/deploy-azure.yml
 grep -q 'group: regimpact-staging' .github/workflows/destroy-azure-staging.yml
 grep -q 'CONFIRMATION:' .github/workflows/destroy-azure-staging.yml

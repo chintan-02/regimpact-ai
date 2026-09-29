@@ -18,7 +18,7 @@ outputs=$(az deployment group show \
 web_url=$(jq -r '.webUrl.value // empty' <<<"$outputs")
 [[ -n "$web_url" ]] || { echo "Deployment does not expose webUrl" >&2; exit 1; }
 
-apps=(api web worker dispatcher scheduler)
+apps=(api web worker)
 for component in "${apps[@]}"; do
   state=$(az containerapp show \
     --resource-group "$RESOURCE_GROUP" \
@@ -26,6 +26,16 @@ for component in "${apps[@]}"; do
     --query properties.provisioningState \
     --output tsv)
   [[ "$state" == "Succeeded" ]] || { echo "$component provisioning state: $state" >&2; exit 1; }
+done
+
+jobs=(migrate dispatcher scheduler)
+for component in "${jobs[@]}"; do
+  state=$(az containerapp job show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "regimpact-staging-$component" \
+    --query properties.provisioningState \
+    --output tsv)
+  [[ "$state" == "Succeeded" ]] || { echo "$component job provisioning state: $state" >&2; exit 1; }
 done
 
 migration_job=$(jq -r '.migrationJobName.value // empty' <<<"$outputs")
@@ -47,6 +57,11 @@ apps_json=$(az containerapp list \
   --query "[?starts_with(name, 'regimpact-staging-')].{name:name,provisioning_state:properties.provisioningState,latest_revision:properties.latestRevisionName,latest_ready_revision:properties.latestReadyRevisionName}" \
   --output json)
 
+jobs_json=$(az containerapp job list \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "[?starts_with(name, 'regimpact-staging-')].{name:name,provisioning_state:properties.provisioningState,trigger_type:properties.configuration.triggerType}" \
+  --output json)
+
 jq -n \
   --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --arg resource_group "$RESOURCE_GROUP" \
@@ -56,7 +71,8 @@ jq -n \
   --arg migration_job "$migration_job" \
   --arg migration_status "$migration_status" \
   --argjson apps "$apps_json" \
-  '{checked_at:$checked_at,resource_group:$resource_group,deployment:$deployment,web_url:$web_url,expected_version:$version,migration:{job:$migration_job,status:$migration_status},apps:$apps,status:"passed"}' \
+  --argjson jobs "$jobs_json" \
+  '{checked_at:$checked_at,resource_group:$resource_group,deployment:$deployment,web_url:$web_url,expected_version:$version,migration:{job:$migration_job,status:$migration_status},apps:$apps,jobs:$jobs,status:"passed"}' \
   > deployment-evidence.json
 
 echo "Azure staging operational validation passed."
