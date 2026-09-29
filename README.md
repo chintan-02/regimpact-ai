@@ -4,7 +4,7 @@
 
 RegImpact AI turns changing regulatory documents into evidence-linked, reviewable control-impact findings. It monitors sources, versions documents, detects section-level changes, extracts obligation candidates, retrieves relevant controls, and routes uncertain or consequential decisions to authorized reviewers.
 
-> **Current release: v0.5.0** — verified on Azure staging with immutable deployment evidence.  
+> **Current release: v0.5.0** — verified on Azure staging with immutable deployment evidence; current `main` uses an ephemeral, cost-aware staging lifecycle.  
 > RegImpact is an analyst-assurance platform, not a regulatory chatbot, legal-advice service, or autonomous compliance decision-maker.
 
 [![Release](https://img.shields.io/github/v/release/chintan-02/regimpact-ai)](https://github.com/chintan-02/regimpact-ai/releases/tag/v0.5.0)
@@ -52,12 +52,26 @@ A representative outcome is: a regulator changes an incident-reporting deadline,
 | Runtime version | `0.5.0` |
 | Environment | Protected GitHub `staging` environment; Azure Canada Central |
 | Migration | `regimpact-staging-migrate` — succeeded |
-| Workloads | API, web, worker plus dispatcher/scheduler control-plane workloads — verified in v0.5.0 |
+| Workloads | Historical v0.5.0: 5 healthy Container Apps · Current `main`: 3 Container Apps + 3 Container Apps Jobs |
 | Readiness contract | `{"status":"ready","version":"0.5.0"}` |
 | Evidence artifact | `deployment-evidence-3b3d90ade4b75c845395a390b00cd3d0ba20d1d0` |
 | Release evidence | [v0.5.0 audit](docs/release-audit-v0.5.md) |
 
 The API remains internal. The public web application exposes a minimal readiness route and protects analyst operations behind authentication.
+
+## Post-release staging cost control
+
+The immutable v0.5.0 evidence above describes the release as it was actually verified. After that release, Azure cost analysis showed that leaving a production-shaped staging environment online continuously created unnecessary idle spend across Container Apps, managed Redis, PostgreSQL, and telemetry.
+
+Current `main` therefore uses a different staging lifecycle:
+
+1. provision the complete staging environment from Bicep;
+2. run the migration job;
+3. promote and validate the application;
+4. capture immutable deployment evidence and a resource inventory;
+5. delete `rg-regimpact-staging` by default.
+
+The scheduler now runs as a bounded job every 15 minutes and the transactional-outbox dispatcher runs as a bounded job every minute. The worker remains a Redis/Dramatiq queue consumer because that is still the correct asynchronous execution model. Keeping staging online is an explicit operator decision rather than the default.
 
 ## Architecture
 
@@ -84,13 +98,18 @@ PostgreSQL is the system of record for tenants, metadata, lineage, workflow stat
 flowchart TD
     GH["GitHub Actions + OIDC"] --> ACR["Azure Container Registry"]
     GH --> B["Bicep deployment"]
-    ACR --> CA["Azure Container Apps"]
-    B --> CA
-    CA --> D["PostgreSQL, Redis, Blob, Key Vault"]
-    CA --> O["Application Insights + Log Analytics"]
+    ACR --> APP["API · Web · Worker Container Apps"]
+    ACR --> JOBS["Migration · Dispatcher · Scheduler Jobs"]
+    B --> APP
+    B --> JOBS
+    APP --> D["PostgreSQL · Redis · Blob · Key Vault"]
+    JOBS --> D
+    APP --> O["Application Insights"]
+    GH --> E["Deployment evidence + resource inventory"]
+    E --> T["Default staging teardown"]
 ```
 
-The deployment performs infrastructure validation, publishes commit-addressed images, stages workloads at zero replicas, runs the database migration job, promotes workloads only after migration success, verifies health, and retains deployment evidence. Current staging is ephemeral by default: dispatcher/scheduler control-plane loops run as bounded scheduled jobs and the resource group is deleted after successful validation unless an operator explicitly keeps it online.
+The deployment performs infrastructure validation, publishes commit-addressed images, stages application workloads before migration, runs Alembic as a one-shot job, promotes the migrated workloads, verifies the complete system, and retains deployment evidence. Current `main` runs the dispatcher and scheduler as bounded scheduled Container Apps Jobs instead of idle 24/7 containers. Staging is ephemeral by default: after successful validation and evidence capture, the workflow requests deletion of the complete resource group unless an operator explicitly selects `keep_staging_online=true`.
 
 ## Core capabilities
 
@@ -106,7 +125,7 @@ The deployment performs infrastructure validation, publishes commit-addressed im
 | Controlled automation | Persisted bounded workflow, deterministic policy gates, insufficient-evidence blocking, creator/approver separation, no automatic consequential execution |
 | Security | Database-backed users, admin/analyst/viewer RBAC, scrypt password hashing, short-lived signed tokens, HTTP-only cookies, tenant isolation |
 | Reliability | Transactional outbox, Redis/Dramatiq workers, scheduled dispatcher/scheduler jobs, idempotent jobs, retries, leases, dead-letter state, startup/liveness/readiness probes |
-| Observability | Structured JSON logs, request/trace/tenant/actor correlation, W3C trace context, metrics, Application Insights, Log Analytics |
+| Observability | Structured JSON logs, request/trace/tenant/actor correlation, W3C trace context, metrics, Application Insights; high-volume container log streaming disabled in ephemeral staging |
 | Cloud delivery | Bicep, Azure Container Apps, managed PostgreSQL, Redis, Blob Storage, ACR, Key Vault, GitHub OIDC, immutable images |
 
 ## AI/ML engineering approach
@@ -143,7 +162,7 @@ This distinction keeps portfolio claims verifiable and prevents library names fr
 
 ## Product walkthrough
 
-The screenshot gallery will be added after fresh v0.5.0 staging captures are sanitized. The planned sequence keeps the future visual story consistent and recruiter-friendly:
+The verified v0.5.0 Azure evidence remains preserved in the release audit and GitHub Actions artifact history. The original staging resource group has since been intentionally removed as part of the cost-control lifecycle, so any new product screenshots will require a temporary redeployment rather than keeping paid infrastructure online continuously. The planned capture sequence remains:
 
 | Planned view | What it will demonstrate |
 | --- | --- |
@@ -165,7 +184,7 @@ Exact filenames, dimensions, redaction rules, and Markdown layout are documented
 | Frontend | Next.js, React, TypeScript |
 | Data and retrieval | PostgreSQL, pgvector, full-text search, reciprocal-rank fusion |
 | Async processing | Redis, Dramatiq, transactional outbox |
-| Cloud | Azure Container Apps, Flexible Server for PostgreSQL, Blob Storage, ACR, Key Vault |
+| Cloud | Azure Container Apps + Jobs, Flexible Server for PostgreSQL, Redis, Blob Storage, ACR, Key Vault |
 | Delivery | GitHub Actions, OIDC workload identity, Bicep, Docker |
 | Operations | Application Insights, Log Analytics, structured logging, metrics, tracing |
 
@@ -180,7 +199,7 @@ scripts/           Deployment, validation, smoke-test, evidence, and rollback to
 docker-compose.yml Local PostgreSQL, Redis, API, web, worker, and demo environment
 ```
 
-The system is a modular monolith with independently executed web, API, worker, dispatcher, scheduler, and migration workloads. This keeps domain boundaries clear without introducing premature microservice coordination.
+The system is a modular monolith with independently executed web, API, worker, dispatcher, scheduler, and migration workloads. In current Azure staging, web/API/worker run as Container Apps while migration/dispatcher/scheduler run as Container Apps Jobs. Local development retains the long-running dispatcher/scheduler loop entrypoints. This keeps domain boundaries clear without introducing premature microservice coordination.
 
 ## Run locally
 
