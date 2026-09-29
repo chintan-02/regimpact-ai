@@ -2,7 +2,8 @@
 
 import json
 from dataclasses import asdict
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -183,6 +184,10 @@ def list_regulations(
         .where(RegulationRecord.organization_id == organization_id)
         .order_by(RegulationRecord.title)
     ).all()
+    typed_rows = cast(
+        list[tuple[RegulationRecord, int | None, datetime | None, int, int]],
+        rows,
+    )
     return [
         RegulationListItem(
             **RegulationResponse.model_validate(record).model_dump(),
@@ -191,7 +196,7 @@ def list_regulations(
             total_changes=total_changes,
             monitored_sources=monitored_sources,
         )
-        for record, latest_ordinal, latest_ingested_at, total_changes, monitored_sources in rows
+        for record, latest_ordinal, latest_ingested_at, total_changes, monitored_sources in typed_rows
     ]
 
 
@@ -273,6 +278,7 @@ def list_versions(
         .where(RegulationVersionRecord.regulation_id == regulation_id)
         .order_by(RegulationVersionRecord.ordinal.desc())
     ).all()
+    typed_rows = cast(list[tuple[RegulationVersionRecord, int, int]], rows)
     return [
         VersionSummary(
             id=version.id,
@@ -285,7 +291,7 @@ def list_versions(
             section_count=section_count,
             change_count=change_count,
         )
-        for version, section_count, change_count in rows
+        for version, section_count, change_count in typed_rows
     ]
 
 
