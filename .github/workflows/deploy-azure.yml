@@ -8,6 +8,11 @@ on:
         required: true
         type: choice
         options: [staging]
+      keep_staging_online:
+        description: Keep staging workloads warm after deployment (costs money)
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -175,3 +180,34 @@ jobs:
           echo "- API (internal): ${{ steps.application.outputs.api_url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Web: ${{ steps.application.outputs.web_url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Image tag: $IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.keep_staging_online }}" = "true" ]; then
+            echo "- Cost mode: staging intentionally left online; Azure charges can continue." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Cost mode: staging will be deleted after validation to avoid idle Azure runtime cost." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Capture pre-delete staging inventory
+        if: inputs.environment == 'staging' && !inputs.keep_staging_online
+        run: |
+          az resource list \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "[].{name:name,type:type,location:location}" \
+            -o json > azure-staging-predelete-inventory.json
+          cat azure-staging-predelete-inventory.json
+
+      - name: Upload pre-delete staging inventory
+        if: inputs.environment == 'staging' && !inputs.keep_staging_online
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-staging-predelete-inventory-${{ github.sha }}
+          path: azure-staging-predelete-inventory.json
+          retention-days: 90
+
+      - name: Delete staging after validation
+        if: inputs.environment == 'staging' && !inputs.keep_staging_online
+        run: |
+          az group delete \
+            --name "$RESOURCE_GROUP" \
+            --yes \
+            --no-wait
+          echo "- Staging resource-group deletion requested after successful validation." >> "$GITHUB_STEP_SUMMARY"

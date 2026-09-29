@@ -1,0 +1,72 @@
+name: destroy-azure-staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DELETE-rg-regimpact-staging to permanently delete Azure staging
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: regimpact-staging
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      RESOURCE_GROUP: rg-regimpact-staging
+    steps:
+      - name: Verify destructive-action confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          expected="DELETE-${RESOURCE_GROUP}"
+          if [ "$CONFIRMATION" != "$expected" ]; then
+            echo "Confirmation mismatch. Expected: $expected" >&2
+            exit 1
+          fi
+
+      - name: Authenticate with Azure using OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Capture resource inventory before deletion
+        run: |
+          az resource list \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "[].{name:name,type:type,location:location}" \
+            -o json > azure-staging-predelete-inventory.json
+          cat azure-staging-predelete-inventory.json
+
+      - name: Upload pre-delete inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: azure-staging-predelete-inventory-${{ github.run_id }}
+          path: azure-staging-predelete-inventory.json
+          retention-days: 90
+
+      - name: Delete staging resource group
+        run: |
+          az group delete \
+            --name "$RESOURCE_GROUP" \
+            --yes \
+            --no-wait
+
+      - name: Publish deletion summary
+        run: |
+          echo "### Azure staging deletion requested" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Resource group: $RESOURCE_GROUP" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deletion is asynchronous. Verify completion in Azure before assuming all resources are gone." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Re-deployment remains manual through deploy-azure.yml." >> "$GITHUB_STEP_SUMMARY"
