@@ -52,7 +52,7 @@ A representative outcome is: a regulator changes an incident-reporting deadline,
 | Runtime version | `0.5.0` |
 | Environment | Protected GitHub `staging` environment; Azure Canada Central |
 | Migration | `regimpact-staging-migrate` — succeeded |
-| Workloads | API, web, worker, dispatcher, and scheduler — healthy |
+| Workloads | API, web, worker plus dispatcher/scheduler control-plane workloads — verified in v0.5.0 |
 | Readiness contract | `{"status":"ready","version":"0.5.0"}` |
 | Evidence artifact | `deployment-evidence-3b3d90ade4b75c845395a390b00cd3d0ba20d1d0` |
 | Release evidence | [v0.5.0 audit](docs/release-audit-v0.5.md) |
@@ -69,8 +69,9 @@ flowchart LR
     API --> PG[("PostgreSQL + pgvector")]
     API --> BS[("Blob Storage")]
     API --> Q["Redis queue"]
-    Q --> W["Worker + dispatcher"]
-    SCH["Scheduler"] --> Q
+    Q --> W["Worker"]
+    DISP["Dispatcher job"] --> Q
+    SCH["Scheduler job"] --> DISP
     W --> PG
     W --> BS
 ```
@@ -89,7 +90,7 @@ flowchart TD
     CA --> O["Application Insights + Log Analytics"]
 ```
 
-The deployment performs infrastructure validation, publishes commit-addressed images, stages workloads at zero replicas, runs the database migration job, promotes workloads only after migration success, verifies health, and retains deployment evidence.
+The deployment performs infrastructure validation, publishes commit-addressed images, stages workloads at zero replicas, runs the database migration job, promotes workloads only after migration success, verifies health, and retains deployment evidence. Current staging is ephemeral by default: dispatcher/scheduler control-plane loops run as bounded scheduled jobs and the resource group is deleted after successful validation unless an operator explicitly keeps it online.
 
 ## Core capabilities
 
@@ -104,7 +105,7 @@ The deployment performs infrastructure validation, publishes commit-addressed im
 | Human review | Accepted, rejected, deferred, and confirmed-unmapped decisions with mandatory rationale and stale-update protection |
 | Controlled automation | Persisted bounded workflow, deterministic policy gates, insufficient-evidence blocking, creator/approver separation, no automatic consequential execution |
 | Security | Database-backed users, admin/analyst/viewer RBAC, scrypt password hashing, short-lived signed tokens, HTTP-only cookies, tenant isolation |
-| Reliability | Transactional outbox, Redis/Dramatiq workers, idempotent jobs, retries, leases, dead-letter state, startup/liveness/readiness probes |
+| Reliability | Transactional outbox, Redis/Dramatiq workers, scheduled dispatcher/scheduler jobs, idempotent jobs, retries, leases, dead-letter state, startup/liveness/readiness probes |
 | Observability | Structured JSON logs, request/trace/tenant/actor correlation, W3C trace context, metrics, Application Insights, Log Analytics |
 | Cloud delivery | Bicep, Azure Container Apps, managed PostgreSQL, Redis, Blob Storage, ACR, Key Vault, GitHub OIDC, immutable images |
 
