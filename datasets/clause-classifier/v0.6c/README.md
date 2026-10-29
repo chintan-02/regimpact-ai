@@ -275,6 +275,8 @@ from its append-only response file. Review provider retention, privacy and cost 
 text; never place credentials in a command, repository file or manifest. The endpoint must support
 OpenAI-compatible strict JSON-schema response formats: the runner constrains `label` to the seven
 taxonomy values, bounds confidence to zero through one and rejects additional response fields.
+Prompt v2 also distinguishes direct duties from evidentiary rules, enforcement mechanics,
+defenses, exemptions and other provisions that must not be converted into inferred obligations.
 
 ```bash
 PYTHONPATH=src python scripts/run_silver_labeler.py \
