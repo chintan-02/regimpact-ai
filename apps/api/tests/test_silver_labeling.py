@@ -327,3 +327,51 @@ def test_third_model_adjudicator_must_be_independent(tmp_path: Path) -> None:
             labeler_c_id="labeler-c",
             model_c="model-a",
         )
+
+
+
+def test_adjudication_preserves_low_confidence_and_empty_third_stream(
+    tmp_path: Path,
+) -> None:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        seed="fixed",
+    )
+    experiment = tmp_path / "experiment"
+    experiment_manifest = prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="labeler-a",
+        model_a="model-a",
+        labeler_b_id="labeler-b",
+        model_b="model-b",
+    )
+    _write_responses(experiment, "A", confidence=0.7)
+    _write_responses(experiment, "B", confidence=0.7)
+    manifest = prepare_silver_adjudication(
+        experiment,
+        labeler_c_id="labeler-c",
+        model_c="model-c",
+    )
+    assert manifest["eligible_disagreements"] == 0
+
+    report = run_openai_compatible_labeler(
+        experiment / "labeler-c-requests.jsonl",
+        experiment / "labeler-c-responses.jsonl",
+        base_url="https://models.example/v1",
+        model_id="model-c",
+        labeler_id="labeler-c",
+    )
+    assert report["completed"] == 0
+    assert report["status"] == "complete"
+    assert (experiment / "labeler-c-responses.jsonl").read_text() == ""
+
+    accepted, unresolved, result = compile_silver_adjudication(experiment)
+    assert accepted == []
+    assert len(unresolved) == experiment_manifest["training_clauses"]
+    assert {item["reason"] for item in unresolved} == {"low_confidence_agreement"}
+    assert result["unresolved_disagreements"] == experiment_manifest["training_clauses"]

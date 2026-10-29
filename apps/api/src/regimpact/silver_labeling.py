@@ -332,6 +332,7 @@ def run_openai_compatible_labeler(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     responses_path.parent.mkdir(parents=True, exist_ok=True)
+    responses_path.touch(exist_ok=True)
     with httpx.Client(timeout=timeout_seconds, headers=headers) as client:
         for request in requests:
             clause_id = str(request.get("clause_id"))
@@ -632,7 +633,14 @@ def compile_silver_adjudication(
     if not isinstance(expected, dict):
         raise AnnotationSamplingError("invalid third-labeler identity")
     adjudicated: list[dict[str, Any]] = []
-    unresolved: list[dict[str, Any]] = []
+    unresolved = [
+        {**item, "reason": "low_confidence_agreement"}
+        for item in review
+        if (
+            not item["held_out_from_training"]
+            and item["label_a"] == item["label_b"]
+        )
+    ]
     for clause_id, dispute in disputes.items():
         request = request_by_id[clause_id]
         response = response_by_id[clause_id]
