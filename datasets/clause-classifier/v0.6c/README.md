@@ -201,3 +201,50 @@ PYTHONPATH=src python scripts/report_annotation_pilot.py \
 
 The Python validator remains authoritative. The browser is a convenience interface, not a way to
 bypass independent-human, complete-coverage, adjudication, dataset-audit or training gates.
+
+## v0.6C-6 production annotation campaign
+
+The production dataset gate requires at least 500 resolved clauses and 30 examples in every final
+class. Because human disagreements and true-label imbalance reduce the admitted dataset, prepare a
+700-clause campaign in seven manageable 100-clause batches. Every batch receives a unique package
+identity and browser storage key, preventing one workspace from overwriting another. Sampling
+strata remain enrichment heuristics only and are never exposed as answers.
+
+```bash
+cd apps/api
+PYTHONPATH=src python scripts/prepare_annotation_campaign.py \
+  --candidates "$REGIMPACT_CORPUS_ROOT/candidates.jsonl" \
+  --queue-receipt "$REGIMPACT_CORPUS_ROOT/candidate-queue-receipt.json" \
+  --output-dir "$REGIMPACT_CORPUS_ROOT/production-campaign-v1" \
+  --campaign-id v0.6c6-production-v1 \
+  --target 700 \
+  --batch-size 100 \
+  --seed v0.6c6-production-v1
+```
+
+Give each `workspace-a.html` and `workspace-b.html` to different humans for that clause. A reviewer
+may work across multiple batches, but no person may provide both votes for the same clause. Returned
+exports must be saved as `completed-a.json` and `completed-b.json` in their exact batch directory.
+Do not copy labels between slots, use AI answers as human labels, or admit the invalidated random
+pilot run.
+
+Validate the entire campaign at any time:
+
+```bash
+PYTHONPATH=src python scripts/report_annotation_campaign.py \
+  --campaign-dir "$REGIMPACT_CORPUS_ROOT/production-campaign-v1" \
+  --report "$REGIMPACT_CORPUS_ROOT/production-campaign-v1/progress.json"
+```
+
+Only after every batch is complete, export two governed votes per clause:
+
+```bash
+PYTHONPATH=src python scripts/export_annotation_campaign.py \
+  --campaign-dir "$REGIMPACT_CORPUS_ROOT/production-campaign-v1" \
+  --annotations "$REGIMPACT_CORPUS_ROOT/production-campaign-v1/annotations.jsonl"
+```
+
+The export is still not a training dataset. Run independent third-party adjudication for every
+disagreement, audit the resolved label distribution, and add a targeted follow-up batch if any
+class remains below 30 examples. Training and promotion remain unauthorized until the existing
+v0.6A and v0.6B gates pass.
