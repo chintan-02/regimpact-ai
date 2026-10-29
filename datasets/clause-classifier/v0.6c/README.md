@@ -272,7 +272,9 @@ PYTHONPATH=src python scripts/prepare_silver_experiment.py \
 
 Run each stream against a separately selected OpenAI-compatible model endpoint. The runner resumes
 from its append-only response file. Review provider retention, privacy and cost terms before sending
-text; never place credentials in a command, repository file or manifest.
+text; never place credentials in a command, repository file or manifest. The endpoint must support
+OpenAI-compatible strict JSON-schema response formats: the runner constrains `label` to the seven
+taxonomy values, bounds confidence to zero through one and rejects additional response fields.
 
 ```bash
 PYTHONPATH=src python scripts/run_silver_labeler.py \

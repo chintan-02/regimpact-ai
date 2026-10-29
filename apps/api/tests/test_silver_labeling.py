@@ -9,6 +9,7 @@ from regimpact.annotation_sampling import AnnotationSamplingError
 from regimpact.clause_annotations import ClauseCandidate
 from regimpact.silver_labeling import (
     RESPONSE_SCHEMA_VERSION,
+    SILVER_RESPONSE_FORMAT,
     _parse_model_answer,
     compile_silver_consensus,
     prepare_silver_experiment,
@@ -154,6 +155,26 @@ def test_model_answer_requires_strict_valid_json() -> None:
         _parse_model_answer("```json\n{}\n```")
     with pytest.raises(AnnotationSamplingError, match="fields"):
         _parse_model_answer('{"label":"unknown","confidence":2,"rationale":""}')
+    with pytest.raises(AnnotationSamplingError, match="fields"):
+        _parse_model_answer(
+            '{"label":"prohibition","confidence":0.9,"rationale":"Forbidden.","extra":true}'
+        )
+
+
+def test_silver_response_schema_constrains_taxonomy() -> None:
+    schema = SILVER_RESPONSE_FORMAT["json_schema"]["schema"]
+    assert SILVER_RESPONSE_FORMAT["type"] == "json_schema"
+    assert SILVER_RESPONSE_FORMAT["json_schema"]["strict"] is True
+    assert schema["properties"]["label"]["enum"] == [
+        "obligation",
+        "permission",
+        "prohibition",
+        "definition",
+        "reporting_requirement",
+        "record_retention_requirement",
+        "non_obligation",
+    ]
+    assert schema["additionalProperties"] is False
 
 
 def test_labeler_rejects_cached_responses_from_other_stream(tmp_path: Path) -> None:
