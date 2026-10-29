@@ -109,6 +109,27 @@ def test_blinded_packages_share_tasks_but_not_order_or_labels() -> None:
     assert package_b["labels_visible_from_other_annotator"] is False
 
 
+def test_blinded_packages_support_unique_campaign_batch_ids() -> None:
+    sample = sample_pilot(corpus(), target=25, seed="campaign")
+    package = build_blinded_package(
+        sample,
+        slot="A",
+        seed="campaign",
+        candidate_queue_sha256="f" * 64,
+        package_id_prefix="v0.6c6-production-v1-batch-001",
+    )
+    assert package["package_id"] == "v0.6c6-production-v1-batch-001-a"
+
+    with pytest.raises(AnnotationSamplingError, match="safe stable identifier"):
+        build_blinded_package(
+            sample,
+            slot="A",
+            seed="campaign",
+            candidate_queue_sha256="f" * 64,
+            package_id_prefix="unsafe package",
+        )
+
+
 def test_receipt_binds_exact_candidate_queue(tmp_path: Path) -> None:
     candidates = corpus()
     payload = "\n".join(

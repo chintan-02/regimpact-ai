@@ -181,10 +181,17 @@ def sample_payload(sample: tuple[SampledClause, ...]) -> list[dict[str, Any]]:
 
 
 def build_blinded_package(
-    sample: tuple[SampledClause, ...], *, slot: str, seed: str, candidate_queue_sha256: str
+    sample: tuple[SampledClause, ...],
+    *,
+    slot: str,
+    seed: str,
+    candidate_queue_sha256: str,
+    package_id_prefix: str = "v0.6c4-pilot",
 ) -> dict[str, Any]:
     if slot not in {"A", "B"}:
         raise AnnotationSamplingError("annotator slot must be A or B")
+    if re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,99}", package_id_prefix) is None:
+        raise AnnotationSamplingError("package ID prefix must be a safe stable identifier")
     values = sorted(sample, key=lambda item: _stable_rank(seed, slot, item.candidate.clause_id))
     tasks = [
         {
@@ -207,7 +214,7 @@ def build_blinded_package(
     sample_hash = sha256(_canonical(sample_payload(sample)).encode()).hexdigest()
     return {
         "schema_version": "regimpact-blinded-annotation-package-v1",
-        "package_id": f"v0.6c4-pilot-{slot.lower()}",
+        "package_id": f"{package_id_prefix}-{slot.lower()}",
         "annotator_slot": slot,
         "annotator_id": None,
         "candidate_queue_sha256": candidate_queue_sha256,
@@ -255,6 +262,18 @@ def _aware_timestamp(value: object) -> bool:
         return False
 
 
+def _package_prefix(package_id: object, slot: object) -> str | None:
+    if slot not in {"A", "B"} or not isinstance(package_id, str):
+        return None
+    suffix = f"-{str(slot).lower()}"
+    if not package_id.endswith(suffix):
+        return None
+    prefix = package_id[: -len(suffix)]
+    if re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,99}", prefix) is None:
+        return None
+    return prefix
+
+
 def validate_annotation_package(
     sample_path: Path, package_path: Path, *, expected_slot: str | None = None
 ) -> dict[str, Any]:
@@ -285,7 +304,7 @@ def validate_annotation_package(
         package.get("schema_version") != "regimpact-blinded-annotation-package-v1"
         or slot not in {"A", "B"}
         or (expected_slot is not None and slot != expected_slot)
-        or package.get("package_id") != f"v0.6c4-pilot-{str(slot).lower()}"
+        or _package_prefix(package.get("package_id"), slot) is None
         or package.get("sample_sha256") != sample_hash
         or package.get("sampling_policy_version") != SAMPLING_POLICY_VERSION
         or package.get("guideline_version") != GUIDELINE_VERSION
@@ -384,7 +403,7 @@ def annotation_progress_report(
             not isinstance(package, dict)
             or package.get("schema_version") != "regimpact-blinded-annotation-package-v1"
             or package.get("annotator_slot") != expected_slot
-            or package.get("package_id") != f"v0.6c4-pilot-{expected_slot.lower()}"
+            or _package_prefix(package.get("package_id"), expected_slot) is None
             or package.get("sample_sha256") != expected_sample_hash
             or package.get("sampling_policy_version") != SAMPLING_POLICY_VERSION
             or package.get("guideline_version") != GUIDELINE_VERSION
@@ -436,6 +455,10 @@ def annotation_progress_report(
         label_counts[expected_slot] = counts
 
     identities = [packages[slot].get("annotator_id") for slot in ("A", "B")]
+    if _package_prefix(packages["A"].get("package_id"), "A") != _package_prefix(
+        packages["B"].get("package_id"), "B"
+    ):
+        raise AnnotationSamplingError("annotation packages belong to different batches")
     if packages["A"].get("candidate_queue_sha256") != packages["B"].get(
         "candidate_queue_sha256"
     ):
