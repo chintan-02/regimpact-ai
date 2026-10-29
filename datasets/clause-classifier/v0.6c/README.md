@@ -248,3 +248,63 @@ The export is still not a training dataset. Run independent third-party adjudica
 disagreement, audit the resolved label distribution, and add a targeted follow-up batch if any
 class remains below 30 examples. Training and promotion remain unauthorized until the existing
 v0.6A and v0.6B gates pass.
+
+## v0.6C-7 experimental silver labels
+
+For solo experimentation, the production two-human gate remains unchanged. A separate weak-
+supervision path can label the 700-clause campaign with two distinct AI models and reserve 70
+clauses from whole holdout documents for one-person human evaluation. AI consensus labels are
+silver training data, never human ground truth, and cannot produce a production promotion receipt.
+
+Prepare the experiment with immutable model identities (prefer pinned model revisions):
+
+```bash
+cd apps/api
+PYTHONPATH=src python scripts/prepare_silver_experiment.py \
+  --campaign-dir "$REGIMPACT_CAMPAIGN_ROOT" \
+  --output-dir "$REGIMPACT_SILVER_ROOT" \
+  --labeler-a-id labeler-a-v1 \
+  --model-a MODEL_A \
+  --labeler-b-id labeler-b-v1 \
+  --model-b MODEL_B \
+  --evaluation-size 70
+```
+
+Run each stream against a separately selected OpenAI-compatible model endpoint. The runner resumes
+from its append-only response file. Review provider retention, privacy and cost terms before sending
+text; never place credentials in a command, repository file or manifest.
+
+```bash
+PYTHONPATH=src python scripts/run_silver_labeler.py \
+  --requests "$REGIMPACT_SILVER_ROOT/labeler-a-requests.jsonl" \
+  --responses "$REGIMPACT_SILVER_ROOT/labeler-a-responses.jsonl" \
+  --base-url "$LABELER_A_BASE_URL" \
+  --model MODEL_A \
+  --labeler-id labeler-a-v1 \
+  --api-key-env LABELER_A_API_KEY
+
+PYTHONPATH=src python scripts/run_silver_labeler.py \
+  --requests "$REGIMPACT_SILVER_ROOT/labeler-b-requests.jsonl" \
+  --responses "$REGIMPACT_SILVER_ROOT/labeler-b-responses.jsonl" \
+  --base-url "$LABELER_B_BASE_URL" \
+  --model MODEL_B \
+  --labeler-id labeler-b-v1 \
+  --api-key-env LABELER_B_API_KEY
+```
+
+Compile only high-confidence model agreement. All holdout-document clauses, disagreements and
+low-confidence predictions are routed away from training:
+
+```bash
+PYTHONPATH=src python scripts/compile_silver_consensus.py \
+  --experiment-dir "$REGIMPACT_SILVER_ROOT" \
+  --silver-labels "$REGIMPACT_SILVER_ROOT/silver-training-labels.jsonl" \
+  --review-queue "$REGIMPACT_SILVER_ROOT/silver-review-queue.jsonl" \
+  --report "$REGIMPACT_SILVER_ROOT/silver-consensus-report.json" \
+  --minimum-confidence 0.80
+```
+
+Open `human-evaluation-workspace.html`, label its 70 held-out clauses carefully and export the
+result. This is a single-human evaluation set, not independently adjudicated gold data. The
+experiment may support honest exploratory metrics, but `model_training_authorized` and
+`production_promotion_authorized` remain false in every receipt.

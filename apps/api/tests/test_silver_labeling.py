@@ -1,0 +1,186 @@
+import json
+from hashlib import sha256
+from pathlib import Path
+
+import pytest
+
+from regimpact.annotation_campaign import prepare_campaign
+from regimpact.annotation_sampling import AnnotationSamplingError
+from regimpact.clause_annotations import ClauseCandidate
+from regimpact.silver_labeling import (
+    RESPONSE_SCHEMA_VERSION,
+    _parse_model_answer,
+    compile_silver_consensus,
+    prepare_silver_experiment,
+    run_openai_compatible_labeler,
+)
+
+
+def _candidate(index: int) -> ClauseCandidate:
+    document = index % 25
+    text = f"Every institution shall maintain controls for example {index}."
+    return ClauseCandidate(
+        clause_id=f"clause-{index:04d}",
+        source_id=f"source-{document:02d}",
+        document_id=f"document-{document:02d}",
+        regulator=f"Regulator {document % 5}",
+        jurisdiction="Canada (federal)",
+        title=f"Document {document}",
+        version="a" * 40,
+        source_url="https://laws.example/document",
+        rights_status="approved",
+        rights_basis="reviewed",
+        retrieved_at="2026-09-04T16:00:00+00:00",
+        content_sha256=f"{document:064x}",
+        section_id=f"section-{index}",
+        heading="Heading",
+        page=None,
+        position=index,
+        text=text,
+        text_sha256=sha256(text.encode()).hexdigest(),
+    )
+
+
+def _write_responses(experiment: Path, slot: str, *, confidence: float = 0.9) -> None:
+    manifest = json.loads((experiment / "silver-experiment-manifest.json").read_text())
+    config = manifest["labelers"][slot]
+    requests = [
+        json.loads(line)
+        for line in (experiment / f"labeler-{slot.lower()}-requests.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    responses = [
+        {
+            "schema_version": RESPONSE_SCHEMA_VERSION,
+            "clause_id": item["clause_id"],
+            "text_sha256": item["text_sha256"],
+            "labeler_id": config["labeler_id"],
+            "model_id": config["model_id"],
+            "prompt_version": config["prompt_version"],
+            "label": "obligation",
+            "confidence": confidence,
+            "rationale": "The clause imposes a mandatory action.",
+        }
+        for item in requests
+    ]
+    (experiment / f"labeler-{slot.lower()}-responses.jsonl").write_text(
+        "".join(json.dumps(item) + "\n" for item in responses)
+    )
+
+
+def test_silver_experiment_is_document_isolated_and_never_promotable(tmp_path: Path) -> None:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        batch_size=100,
+        seed="fixed",
+    )
+    experiment = tmp_path / "experiment"
+    manifest = prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="labeler-a",
+        model_a="model-a@revision-1",
+        labeler_b_id="labeler-b",
+        model_b="model-b@revision-2",
+    )
+    assert manifest["evaluation_clauses"] == 70
+    assert manifest["training_clauses"] >= 500
+    assert manifest["production_promotion_authorized"] is False
+    assert manifest["model_training_authorized"] is False
+    evaluation = json.loads((experiment / "human-evaluation-sample.json").read_text())["records"]
+    assert {item["document_id"] for item in evaluation} <= set(manifest["holdout_documents"])
+
+    _write_responses(experiment, "A")
+    _write_responses(experiment, "B")
+    accepted, review, report = compile_silver_consensus(experiment)
+    assert len(accepted) == manifest["training_clauses"]
+    assert all(item["regulator"].startswith("Regulator") for item in accepted)
+    assert len(review) == 700 - manifest["training_clauses"]
+    assert sum(item["human_evaluation_clause"] for item in review) == 70
+    assert report["experimental_training_eligible"] is True
+    assert report["production_promotion_authorized"] is False
+
+
+def test_silver_experiment_rejects_same_model_and_tampered_output(tmp_path: Path) -> None:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        seed="fixed",
+    )
+    with pytest.raises(AnnotationSamplingError, match="distinct"):
+        prepare_silver_experiment(
+            campaign,
+            tmp_path / "bad",
+            labeler_a_id="a",
+            model_a="same",
+            labeler_b_id="b",
+            model_b="same",
+        )
+
+    experiment = tmp_path / "experiment"
+    prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="a",
+        model_a="model-a",
+        labeler_b_id="b",
+        model_b="model-b",
+    )
+    _write_responses(experiment, "A")
+    _write_responses(experiment, "B")
+    path = experiment / "labeler-a-responses.jsonl"
+    values = path.read_text().splitlines()
+    first = json.loads(values[0])
+    first["text_sha256"] = "0" * 64
+    values[0] = json.dumps(first)
+    path.write_text("\n".join(values) + "\n")
+    with pytest.raises(AnnotationSamplingError, match="invalid labeler A response"):
+        compile_silver_consensus(experiment)
+
+
+def test_model_answer_requires_strict_valid_json() -> None:
+    assert _parse_model_answer(
+        '{"label":"prohibition","confidence":0.91,"rationale":"It forbids conduct."}'
+    ) == ("prohibition", 0.91, "It forbids conduct.")
+    with pytest.raises(AnnotationSamplingError, match="strict JSON"):
+        _parse_model_answer("```json\n{}\n```")
+    with pytest.raises(AnnotationSamplingError, match="fields"):
+        _parse_model_answer('{"label":"unknown","confidence":2,"rationale":""}')
+
+
+def test_labeler_rejects_cached_responses_from_other_stream(tmp_path: Path) -> None:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        seed="fixed",
+    )
+    experiment = tmp_path / "experiment"
+    prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="labeler-a",
+        model_a="model-a",
+        labeler_b_id="labeler-b",
+        model_b="model-b",
+    )
+    _write_responses(experiment, "A")
+
+    with pytest.raises(AnnotationSamplingError, match="cached AI response identity mismatch"):
+        run_openai_compatible_labeler(
+            experiment / "labeler-b-requests.jsonl",
+            experiment / "labeler-a-responses.jsonl",
+            base_url="https://models.example/v1",
+            model_id="model-b",
+            labeler_id="labeler-b",
+        )
