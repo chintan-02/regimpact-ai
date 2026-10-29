@@ -312,3 +312,41 @@ Open `human-evaluation-workspace.html`, label its 70 held-out clauses carefully 
 result. This is a single-human evaluation set, not independently adjudicated gold data. The
 experiment may support honest exploratory metrics, but `model_training_authorized` and
 `production_promotion_authorized` remain false in every receipt.
+
+
+## v0.6C-8 governed third-model adjudication
+
+When the two silver labelers disagree, prepare a third independent model stream from only the
+non-held-out disagreements. The command fingerprints both original response streams, excludes all
+holdout-document clauses and refuses a model or labeler identity already used in slots A or B.
+
+```bash
+PYTHONPATH=src python scripts/prepare_silver_adjudication.py \
+  --experiment-dir "$REGIMPACT_SILVER_ROOT" \
+  --labeler-c-id labeler-c-v1 \
+  --model-c MODEL_C \
+  --minimum-confidence 0.80
+
+PYTHONPATH=src python scripts/run_silver_labeler.py \
+  --requests "$REGIMPACT_SILVER_ROOT/labeler-c-requests.jsonl" \
+  --responses "$REGIMPACT_SILVER_ROOT/labeler-c-responses.jsonl" \
+  --base-url "$LABELER_C_BASE_URL" \
+  --model MODEL_C \
+  --labeler-id labeler-c-v1
+```
+
+Compile the final experimental silver set only after slot C has complete validated coverage:
+
+```bash
+PYTHONPATH=src python scripts/compile_silver_adjudication.py \
+  --experiment-dir "$REGIMPACT_SILVER_ROOT" \
+  --silver-labels "$REGIMPACT_SILVER_ROOT/silver-adjudicated-labels.jsonl" \
+  --unresolved-review "$REGIMPACT_SILVER_ROOT/silver-unresolved-review.jsonl" \
+  --report "$REGIMPACT_SILVER_ROOT/silver-adjudication-report.json"
+```
+
+A disagreement is accepted only when C agrees with A or B and both supporting confidences meet the
+recorded threshold. Three-way disagreement and low-confidence majority cases remain unresolved.
+These outputs are AI silver labels, not human ground truth. The 70-clause document-isolated human
+evaluation remains mandatory for any experimental quality claim, and production promotion remains
+unauthorized.

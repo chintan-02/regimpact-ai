@@ -74,6 +74,8 @@ jobs:
           python scripts/prepare_silver_experiment.py --help
           python scripts/run_silver_labeler.py --help
           python scripts/compile_silver_consensus.py --help
+          python scripts/prepare_silver_adjudication.py --help
+          python scripts/compile_silver_adjudication.py --help
           python scripts/report_human_evaluation.py --help
           python scripts/acquire_regulatory_corpus.py --validate-only \
             --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \

@@ -25,7 +25,12 @@ from .clause_classifier import ClauseLabel
 SILVER_SCHEMA_VERSION = "regimpact-silver-experiment-v1"
 REQUEST_SCHEMA_VERSION = "regimpact-silver-label-request-v1"
 RESPONSE_SCHEMA_VERSION = "regimpact-silver-label-response-v1"
-PROMPT_VERSIONS = {"A": "regimpact-silver-prompt-a-v2", "B": "regimpact-silver-prompt-b-v2"}
+PROMPT_VERSIONS = {
+    "A": "regimpact-silver-prompt-a-v2",
+    "B": "regimpact-silver-prompt-b-v2",
+    "C": "regimpact-silver-prompt-c-v1",
+}
+ADJUDICATION_SCHEMA_VERSION = "regimpact-silver-adjudication-v1"
 LABELS = tuple(label.value for label in ClauseLabel)
 SILVER_RESPONSE_FORMAT: dict[str, Any] = {
     "type": "json_schema",
@@ -88,11 +93,18 @@ def _prompt(slot: str) -> str:
             "reporting_requirement, record_retention_requirement, prohibition, permission, "
             "definition, obligation, non_obligation"
         )
-    else:
+    elif slot == "B":
         order = (
             "definition, prohibition, permission, record_retention_requirement, "
             "reporting_requirement, obligation, non_obligation"
         )
+    elif slot == "C":
+        order = (
+            "prohibition, definition, reporting_requirement, permission, "
+            "record_retention_requirement, non_obligation, obligation"
+        )
+    else:
+        raise AnnotationSamplingError(f"unknown silver labeler slot: {slot}")
     return (
         "Classify the direct legal function of one Canadian regulatory clause. "
         "Use exactly one label and do not infer a duty that the text does not expressly create. "
@@ -320,6 +332,7 @@ def run_openai_compatible_labeler(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     responses_path.parent.mkdir(parents=True, exist_ok=True)
+    responses_path.touch(exist_ok=True)
     with httpx.Client(timeout=timeout_seconds, headers=headers) as client:
         for request in requests:
             clause_id = str(request.get("clause_id"))
@@ -479,3 +492,230 @@ def human_evaluation_progress(experiment_dir: Path, completed_path: Path) -> dic
         "single_human_review": True,
         "production_promotion_authorized": False,
     }
+
+
+def _sha256_file(path: Path) -> str:
+    return sha256(path.read_bytes()).hexdigest()
+
+
+def prepare_silver_adjudication(
+    experiment_dir: Path,
+    *,
+    labeler_c_id: str,
+    model_c: str,
+    minimum_confidence: float = 0.80,
+) -> dict[str, Any]:
+    """Create an immutable third-model stream for non-held-out A/B disagreements."""
+    if not labeler_c_id.strip() or not model_c.strip():
+        raise AnnotationSamplingError("third labeler and model identities are required")
+    if not 0 <= minimum_confidence <= 1:
+        raise AnnotationSamplingError("minimum confidence must be between zero and one")
+    manifest_path = experiment_dir / "silver-adjudication-manifest.json"
+    requests_path = experiment_dir / "labeler-c-requests.jsonl"
+    if manifest_path.exists() or requests_path.exists():
+        raise AnnotationSamplingError("silver adjudication artifacts already exist")
+
+    experiment = json.loads(
+        (experiment_dir / "silver-experiment-manifest.json").read_text(encoding="utf-8")
+    )
+    if experiment.get("schema_version") != SILVER_SCHEMA_VERSION:
+        raise AnnotationSamplingError("invalid silver experiment manifest")
+    identities = experiment.get("labelers")
+    if not isinstance(identities, dict):
+        raise AnnotationSamplingError("invalid silver labeler identities")
+    for slot in ("A", "B"):
+        identity = identities.get(slot)
+        if not isinstance(identity, dict):
+            raise AnnotationSamplingError("invalid silver labeler identity")
+        if labeler_c_id == identity.get("labeler_id") or model_c == identity.get("model_id"):
+            raise AnnotationSamplingError("third adjudicator must use a distinct identity and model")
+
+    accepted, review, _ = compile_silver_consensus(
+        experiment_dir, minimum_confidence=minimum_confidence
+    )
+    disagreements = [
+        item
+        for item in review
+        if not item["held_out_from_training"] and item["label_a"] != item["label_b"]
+    ]
+    requests = [
+        _request(item, slot="C", labeler_id=labeler_c_id, model_id=model_c)
+        for item in disagreements
+    ]
+    _write_jsonl(requests_path, requests)
+
+    manifest = {
+        "schema_version": ADJUDICATION_SCHEMA_VERSION,
+        "status": "awaiting_third_model",
+        "source_experiment_schema_version": experiment["schema_version"],
+        "source_experiment_seed": experiment["seed"],
+        "minimum_confidence": minimum_confidence,
+        "base_accepted_labels": len(accepted),
+        "eligible_disagreements": len(disagreements),
+        "held_out_clauses_excluded": sum(
+            bool(item["held_out_from_training"]) for item in review
+        ),
+        "source_experiment_sha256": _sha256_file(
+            experiment_dir / "silver-experiment-manifest.json"
+        ),
+        "source_request_sha256": {
+            "A": _sha256_file(experiment_dir / "labeler-a-requests.jsonl"),
+            "B": _sha256_file(experiment_dir / "labeler-b-requests.jsonl"),
+        },
+        "source_response_sha256": {
+            "A": _sha256_file(experiment_dir / "labeler-a-responses.jsonl"),
+            "B": _sha256_file(experiment_dir / "labeler-b-responses.jsonl"),
+        },
+        "requests_sha256": _sha256_file(requests_path),
+        "labeler": {
+            "slot": "C",
+            "labeler_id": labeler_c_id,
+            "model_id": model_c,
+            "prompt_version": PROMPT_VERSIONS["C"],
+        },
+        "silver_labels_are_human_ground_truth": False,
+        "model_training_authorized": False,
+        "production_promotion_authorized": False,
+    }
+    _write_json(manifest_path, manifest)
+    return manifest
+
+
+def compile_silver_adjudication(
+    experiment_dir: Path,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Compile strict two-of-three silver consensus without touching held-out clauses."""
+    manifest_path = experiment_dir / "silver-adjudication-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema_version") != ADJUDICATION_SCHEMA_VERSION:
+        raise AnnotationSamplingError("invalid silver adjudication manifest")
+
+    experiment_path = experiment_dir / "silver-experiment-manifest.json"
+    if _sha256_file(experiment_path) != manifest.get("source_experiment_sha256"):
+        raise AnnotationSamplingError("source experiment fingerprint mismatch")
+
+    for slot in ("A", "B"):
+        request_path = experiment_dir / f"labeler-{slot.lower()}-requests.jsonl"
+        if _sha256_file(request_path) != manifest["source_request_sha256"].get(slot):
+            raise AnnotationSamplingError(f"source labeler {slot} request fingerprint mismatch")
+        response_path = experiment_dir / f"labeler-{slot.lower()}-responses.jsonl"
+        if _sha256_file(response_path) != manifest["source_response_sha256"].get(slot):
+            raise AnnotationSamplingError(f"source labeler {slot} response fingerprint mismatch")
+
+    requests_path = experiment_dir / "labeler-c-requests.jsonl"
+    if _sha256_file(requests_path) != manifest.get("requests_sha256"):
+        raise AnnotationSamplingError("third-labeler request fingerprint mismatch")
+
+    threshold = float(manifest["minimum_confidence"])
+    base_accepted, review, _ = compile_silver_consensus(
+        experiment_dir, minimum_confidence=threshold
+    )
+    disputes = {
+        item["clause_id"]: item
+        for item in review
+        if not item["held_out_from_training"] and item["label_a"] != item["label_b"]
+    }
+    requests = _load_jsonl(requests_path)
+    request_by_id = {str(item.get("clause_id")): item for item in requests}
+    if (
+        len(request_by_id) != len(requests)
+        or set(request_by_id) != set(disputes)
+        or len(disputes) != manifest.get("eligible_disagreements")
+    ):
+        raise AnnotationSamplingError("third-labeler disagreement coverage mismatch")
+
+    responses = _load_jsonl(experiment_dir / "labeler-c-responses.jsonl")
+    response_by_id = {str(item.get("clause_id")): item for item in responses}
+    if len(response_by_id) != len(responses) or set(response_by_id) != set(request_by_id):
+        raise AnnotationSamplingError("third-labeler response coverage mismatch")
+
+    expected = manifest.get("labeler")
+    if not isinstance(expected, dict):
+        raise AnnotationSamplingError("invalid third-labeler identity")
+    adjudicated: list[dict[str, Any]] = []
+    unresolved = [
+        {**item, "reason": "low_confidence_agreement"}
+        for item in review
+        if (
+            not item["held_out_from_training"]
+            and item["label_a"] == item["label_b"]
+        )
+    ]
+    for clause_id, dispute in disputes.items():
+        request = request_by_id[clause_id]
+        response = response_by_id[clause_id]
+        if (
+            response.get("schema_version") != RESPONSE_SCHEMA_VERSION
+            or response.get("clause_id") != clause_id
+            or response.get("text_sha256") != request.get("text_sha256")
+            or response.get("labeler_id") != expected.get("labeler_id")
+            or response.get("model_id") != expected.get("model_id")
+            or response.get("prompt_version") != expected.get("prompt_version")
+        ):
+            raise AnnotationSamplingError(f"invalid labeler C response: {clause_id}")
+        _parse_model_answer(
+            _canonical(
+                {
+                    "label": response.get("label"),
+                    "confidence": response.get("confidence"),
+                    "rationale": response.get("rationale"),
+                }
+            )
+        )
+        label_c = str(response["label"])
+        confidence_c = float(response["confidence"])
+        supporting_confidence: float | None = None
+        supporting_slot: str | None = None
+        if label_c == dispute["label_a"]:
+            supporting_confidence = float(dispute["confidence_a"])
+            supporting_slot = "A"
+        elif label_c == dispute["label_b"]:
+            supporting_confidence = float(dispute["confidence_b"])
+            supporting_slot = "B"
+
+        lineage = {
+            **dispute,
+            "label_c": label_c,
+            "confidence_c": confidence_c,
+            "labeler_c_id": expected["labeler_id"],
+            "model_c_id": expected["model_id"],
+            "prompt_c_version": expected["prompt_version"],
+        }
+        if (
+            supporting_confidence is not None
+            and min(supporting_confidence, confidence_c) >= threshold
+        ):
+            adjudicated.append(
+                {
+                    **lineage,
+                    "label": label_c,
+                    "label_source": "ai_two_of_three_silver",
+                    "supporting_slots": [supporting_slot, "C"],
+                }
+            )
+        else:
+            reason = (
+                "third_model_low_confidence"
+                if supporting_confidence is not None
+                else "three_way_disagreement"
+            )
+            unresolved.append({**lineage, "reason": reason})
+
+    accepted = [*base_accepted, *adjudicated]
+    distribution = dict(sorted(Counter(item["label"] for item in accepted).items()))
+    report = {
+        "schema_version": "regimpact-silver-adjudication-report-v1",
+        "base_accepted_labels": len(base_accepted),
+        "adjudicated_labels_accepted": len(adjudicated),
+        "total_accepted_training_labels": len(accepted),
+        "eligible_disagreements": len(disputes),
+        "unresolved_disagreements": len(unresolved),
+        "held_out_clauses_excluded": manifest["held_out_clauses_excluded"],
+        "minimum_confidence": threshold,
+        "label_distribution": distribution,
+        "experimental_training_eligible": len(accepted) >= 500,
+        "silver_labels_are_human_ground_truth": False,
+        "model_training_authorized": False,
+        "production_promotion_authorized": False,
+    }
+    return accepted, unresolved, report

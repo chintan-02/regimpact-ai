@@ -13,7 +13,9 @@ from regimpact.silver_labeling import (
     SILVER_RESPONSE_FORMAT,
     _parse_model_answer,
     _prompt,
+    compile_silver_adjudication,
     compile_silver_consensus,
+    prepare_silver_adjudication,
     prepare_silver_experiment,
     run_openai_compatible_labeler,
 )
@@ -183,8 +185,9 @@ def test_prompt_defines_legal_boundaries_without_inferred_duties() -> None:
     assert PROMPT_VERSIONS == {
         "A": "regimpact-silver-prompt-a-v2",
         "B": "regimpact-silver-prompt-b-v2",
+        "C": "regimpact-silver-prompt-c-v1",
     }
-    for slot in ("A", "B"):
+    for slot in ("A", "B", "C"):
         prompt = _prompt(slot)
         assert "do not infer a duty" in prompt
         assert "evidentiary rules" in prompt
@@ -220,3 +223,155 @@ def test_labeler_rejects_cached_responses_from_other_stream(tmp_path: Path) -> N
             model_id="model-b",
             labeler_id="labeler-b",
         )
+
+
+def test_third_model_adjudication_excludes_holdout_and_requires_majority(
+    tmp_path: Path,
+) -> None:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        batch_size=100,
+        seed="fixed",
+    )
+    experiment = tmp_path / "experiment"
+    experiment_manifest = prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="labeler-a",
+        model_a="model-a",
+        labeler_b_id="labeler-b",
+        model_b="model-b",
+    )
+    _write_responses(experiment, "A")
+    _write_responses(experiment, "B")
+
+    holdouts = set(experiment_manifest["holdout_documents"])
+    path_b = experiment / "labeler-b-responses.jsonl"
+    responses_b = [json.loads(line) for line in path_b.read_text().splitlines()]
+    changed = 0
+    for response in responses_b:
+        index = int(response["clause_id"].split("-")[1])
+        if f"document-{index % 25:02d}" not in holdouts and changed < 100:
+            response["label"] = "permission"
+            response["rationale"] = "The clause authorizes optional conduct."
+            changed += 1
+    path_b.write_text("".join(json.dumps(item) + "\n" for item in responses_b))
+    assert changed == 100
+
+    manifest = prepare_silver_adjudication(
+        experiment,
+        labeler_c_id="labeler-c",
+        model_c="model-c",
+    )
+    assert manifest["eligible_disagreements"] == 100
+    requests_c = [
+        json.loads(line)
+        for line in (experiment / "labeler-c-requests.jsonl").read_text().splitlines()
+    ]
+    assert not {item["document_id"] for item in requests_c} & holdouts
+
+    responses_c = [
+        {
+            "schema_version": RESPONSE_SCHEMA_VERSION,
+            "clause_id": item["clause_id"],
+            "text_sha256": item["text_sha256"],
+            "labeler_id": "labeler-c",
+            "model_id": "model-c",
+            "prompt_version": PROMPT_VERSIONS["C"],
+            "label": "permission",
+            "confidence": 0.9,
+            "rationale": "The clause authorizes optional conduct.",
+        }
+        for item in requests_c
+    ]
+    (experiment / "labeler-c-responses.jsonl").write_text(
+        "".join(json.dumps(item) + "\n" for item in responses_c)
+    )
+
+    accepted, unresolved, report = compile_silver_adjudication(experiment)
+    assert len(accepted) == experiment_manifest["training_clauses"]
+    assert len(unresolved) == 0
+    assert report["adjudicated_labels_accepted"] == 100
+    assert report["held_out_clauses_excluded"] == 700 - experiment_manifest["training_clauses"]
+    assert report["silver_labels_are_human_ground_truth"] is False
+    assert report["production_promotion_authorized"] is False
+
+
+def test_third_model_adjudicator_must_be_independent(tmp_path: Path) -> None:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        seed="fixed",
+    )
+    experiment = tmp_path / "experiment"
+    prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="labeler-a",
+        model_a="model-a",
+        labeler_b_id="labeler-b",
+        model_b="model-b",
+    )
+    _write_responses(experiment, "A")
+    _write_responses(experiment, "B")
+    with pytest.raises(AnnotationSamplingError, match="distinct"):
+        prepare_silver_adjudication(
+            experiment,
+            labeler_c_id="labeler-c",
+            model_c="model-a",
+        )
+
+
+
+def test_adjudication_preserves_low_confidence_and_empty_third_stream(
+    tmp_path: Path,
+) -> None:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        seed="fixed",
+    )
+    experiment = tmp_path / "experiment"
+    experiment_manifest = prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="labeler-a",
+        model_a="model-a",
+        labeler_b_id="labeler-b",
+        model_b="model-b",
+    )
+    _write_responses(experiment, "A", confidence=0.7)
+    _write_responses(experiment, "B", confidence=0.7)
+    manifest = prepare_silver_adjudication(
+        experiment,
+        labeler_c_id="labeler-c",
+        model_c="model-c",
+    )
+    assert manifest["eligible_disagreements"] == 0
+
+    report = run_openai_compatible_labeler(
+        experiment / "labeler-c-requests.jsonl",
+        experiment / "labeler-c-responses.jsonl",
+        base_url="https://models.example/v1",
+        model_id="model-c",
+        labeler_id="labeler-c",
+    )
+    assert report["completed"] == 0
+    assert report["status"] == "complete"
+    assert (experiment / "labeler-c-responses.jsonl").read_text() == ""
+
+    accepted, unresolved, result = compile_silver_adjudication(experiment)
+    assert accepted == []
+    assert len(unresolved) == experiment_manifest["training_clauses"]
+    assert {item["reason"] for item in unresolved} == {"low_confidence_agreement"}
+    assert result["unresolved_disagreements"] == experiment_manifest["training_clauses"]
