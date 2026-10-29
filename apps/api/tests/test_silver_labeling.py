@@ -12,6 +12,7 @@ from regimpact.silver_labeling import (
     _parse_model_answer,
     compile_silver_consensus,
     prepare_silver_experiment,
+    run_openai_compatible_labeler,
 )
 
 
@@ -153,3 +154,33 @@ def test_model_answer_requires_strict_valid_json() -> None:
         _parse_model_answer("```json\n{}\n```")
     with pytest.raises(AnnotationSamplingError, match="fields"):
         _parse_model_answer('{"label":"unknown","confidence":2,"rationale":""}')
+
+
+def test_labeler_rejects_cached_responses_from_other_stream(tmp_path: Path) -> None:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        seed="fixed",
+    )
+    experiment = tmp_path / "experiment"
+    prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="labeler-a",
+        model_a="model-a",
+        labeler_b_id="labeler-b",
+        model_b="model-b",
+    )
+    _write_responses(experiment, "A")
+
+    with pytest.raises(AnnotationSamplingError, match="cached AI response identity mismatch"):
+        run_openai_compatible_labeler(
+            experiment / "labeler-b-requests.jsonl",
+            experiment / "labeler-a-responses.jsonl",
+            base_url="https://models.example/v1",
+            model_id="model-b",
+            labeler_id="labeler-b",
+        )

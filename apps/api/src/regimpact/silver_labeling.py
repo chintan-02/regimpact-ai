@@ -253,10 +253,38 @@ def run_openai_compatible_labeler(
     if timeout_seconds <= 0 or max_retries <= 0:
         raise AnnotationSamplingError("timeout and max retries must be positive")
     requests = _load_jsonl(requests_path)
+    request_by_id = {str(item.get("clause_id")): item for item in requests}
+    if len(request_by_id) != len(requests):
+        raise AnnotationSamplingError("AI requests contain duplicate clause IDs")
+    for clause_id, request in request_by_id.items():
+        if request.get("model_id") != model_id or request.get("labeler_id") != labeler_id:
+            raise AnnotationSamplingError(f"AI runner identity mismatch: {clause_id}")
     existing = _load_jsonl(responses_path) if responses_path.exists() else []
     completed = {str(item.get("clause_id")): item for item in existing}
     if len(completed) != len(existing):
         raise AnnotationSamplingError("existing AI responses contain duplicate clause IDs")
+    if not set(completed) <= set(request_by_id):
+        raise AnnotationSamplingError("existing AI responses do not match the request stream")
+    for clause_id, cached_response in completed.items():
+        request = request_by_id[clause_id]
+        if (
+            cached_response.get("schema_version") != RESPONSE_SCHEMA_VERSION
+            or cached_response.get("clause_id") != clause_id
+            or cached_response.get("text_sha256") != request.get("text_sha256")
+            or cached_response.get("labeler_id") != labeler_id
+            or cached_response.get("model_id") != model_id
+            or cached_response.get("prompt_version") != request.get("prompt_version")
+        ):
+            raise AnnotationSamplingError(f"cached AI response identity mismatch: {clause_id}")
+        _parse_model_answer(
+            _canonical(
+                {
+                    "label": cached_response.get("label"),
+                    "confidence": cached_response.get("confidence"),
+                    "rationale": cached_response.get("rationale"),
+                }
+            )
+        )
     if not base_url.startswith(("http://", "https://")):
         raise AnnotationSamplingError("AI endpoint must use HTTP or HTTPS")
     headers = {"Content-Type": "application/json"}
@@ -268,8 +296,6 @@ def run_openai_compatible_labeler(
             clause_id = str(request.get("clause_id"))
             if clause_id in completed:
                 continue
-            if request.get("model_id") != model_id or request.get("labeler_id") != labeler_id:
-                raise AnnotationSamplingError(f"AI runner identity mismatch: {clause_id}")
             payload = {
                 "model": model_id,
                 "temperature": 0,
