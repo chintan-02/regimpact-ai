@@ -27,6 +27,23 @@ REQUEST_SCHEMA_VERSION = "regimpact-silver-label-request-v1"
 RESPONSE_SCHEMA_VERSION = "regimpact-silver-label-response-v1"
 PROMPT_VERSIONS = {"A": "regimpact-silver-prompt-a-v1", "B": "regimpact-silver-prompt-b-v1"}
 LABELS = tuple(label.value for label in ClauseLabel)
+SILVER_RESPONSE_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "regimpact_clause_label",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "label": {"type": "string", "enum": list(LABELS)},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "rationale": {"type": "string", "minLength": 1},
+            },
+            "required": ["label", "confidence", "rationale"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 
 def _canonical(value: object) -> str:
@@ -228,6 +245,7 @@ def _parse_model_answer(content: object) -> tuple[str, float, str]:
         raise AnnotationSamplingError("AI labeler did not return strict JSON") from exc
     if (
         not isinstance(value, dict)
+        or set(value) != {"label", "confidence", "rationale"}
         or value.get("label") not in LABELS
         or not isinstance(value.get("confidence"), (int, float))
         or not 0 <= float(value["confidence"]) <= 1
@@ -299,7 +317,7 @@ def run_openai_compatible_labeler(
             payload = {
                 "model": model_id,
                 "temperature": 0,
-                "response_format": {"type": "json_object"},
+                "response_format": SILVER_RESPONSE_FORMAT,
                 "messages": [
                     {"role": "system", "content": request["system_prompt"]},
                     {
@@ -344,7 +362,7 @@ def run_openai_compatible_labeler(
                 raise AnnotationSamplingError(f"AI labeler failed for {clause_id}") from last_error
     responses_path.chmod(0o600)
     return {
-        "schema_version": "regimpact-silver-labeler-run-v1",
+        "schema_version": "regimpact-silver-labeler-run-v2",
         "labeler_id": labeler_id,
         "model_id": model_id,
         "completed": len(completed),
