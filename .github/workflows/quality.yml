@@ -52,6 +52,7 @@ jobs:
           tests/test_xml_section_extraction.py
           tests/test_annotation_sampling.py
           tests/test_annotation_campaign.py
+          tests/test_silver_labeling.py
           tests/test_annotation_workspace.py
           tests/test_classifier_training_governance.py
       - name: Validate classifier command contracts
@@ -70,6 +71,10 @@ jobs:
           python scripts/prepare_annotation_campaign.py --help
           python scripts/report_annotation_campaign.py --help
           python scripts/export_annotation_campaign.py --help
+          python scripts/prepare_silver_experiment.py --help
+          python scripts/run_silver_labeler.py --help
+          python scripts/compile_silver_consensus.py --help
+          python scripts/report_human_evaluation.py --help
           python scripts/acquire_regulatory_corpus.py --validate-only \
             --manifest ../../datasets/clause-classifier/v0.6c/corpus-manifest.json \
             --lock ../../datasets/clause-classifier/v0.6c/acquisition-lock.json \
