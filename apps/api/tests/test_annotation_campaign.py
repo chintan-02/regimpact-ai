@@ -95,6 +95,33 @@ def test_campaign_batches_are_unique_private_and_reportable(tmp_path: Path) -> N
     assert export_report["agreements"] == 500
 
 
+def test_campaign_counts_and_validates_one_return_independently(tmp_path: Path) -> None:
+    candidates = tuple(_candidate(index) for index in range(500))
+    prepare_campaign(
+        candidates,
+        candidate_queue_sha256="f" * 64,
+        output_dir=tmp_path,
+        target=500,
+        batch_size=100,
+        seed="fixed",
+    )
+    batch_dir = tmp_path / "batch-001"
+    completed_a = batch_dir / "completed-a.json"
+    completed_a.write_text((batch_dir / "package-a.json").read_text())
+    _complete(completed_a, "human-a")
+
+    report = campaign_progress_report(tmp_path)
+    assert report["completed"] == {"A": 100, "B": 0}
+    assert report["dual_annotated"] == 0
+    assert report["batches"][0]["completed"] == {"A": 100, "B": 0}
+
+    package = json.loads(completed_a.read_text())
+    package["package_id"] = "wrong-batch-a"
+    completed_a.write_text(json.dumps(package))
+    with pytest.raises(AnnotationSamplingError, match="identity mismatch"):
+        campaign_progress_report(tmp_path)
+
+
 def test_campaign_rejects_targets_below_production_gate(tmp_path: Path) -> None:
     with pytest.raises(AnnotationSamplingError, match="at least 500"):
         prepare_campaign(

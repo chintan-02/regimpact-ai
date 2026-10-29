@@ -237,33 +237,41 @@ def campaign_progress_report(campaign_dir: Path) -> dict[str, Any]:
         sample = _validate_batch_sample(campaign_dir, batch)
         package_a = campaign_dir / str(batch["completed_a"])
         package_b = campaign_dir / str(batch["completed_b"])
-        if not package_a.exists() or not package_b.exists():
+        returned = {"A": package_a.exists(), "B": package_b.exists()}
+        validated: dict[str, dict[str, Any]] = {}
+        completed = {"A": 0, "B": 0}
+        expected_prefix = f"{manifest['campaign_id']}-{batch['batch_id']}"
+        for slot, path in (("A", package_a), ("B", package_b)):
+            if not returned[slot]:
+                continue
+            package = validate_annotation_package(sample, path, expected_slot=slot)
+            if (
+                package.get("package_id") != f"{expected_prefix}-{slot.lower()}"
+                or package.get("candidate_queue_sha256")
+                != manifest["candidate_queue_sha256"]
+            ):
+                raise AnnotationSamplingError(
+                    f"campaign package identity mismatch: {batch['batch_id']}"
+                )
+            validated[slot] = package
+            completed[slot] = sum(
+                task.get("label") is not None for task in package["tasks"]
+            )
+        completed_a += completed["A"]
+        completed_b += completed["B"]
+
+        if not all(returned.values()):
             reports.append(
                 {
                     "batch_id": batch["batch_id"],
                     "status": "awaiting_returned_packages",
                     "count": batch["count"],
+                    "completed": completed,
                 }
             )
             continue
-        validated_a = validate_annotation_package(sample, package_a, expected_slot="A")
-        validated_b = validate_annotation_package(sample, package_b, expected_slot="B")
-        expected_prefix = f"{manifest['campaign_id']}-{batch['batch_id']}"
-        if (
-            validated_a.get("package_id") != f"{expected_prefix}-a"
-            or validated_b.get("package_id") != f"{expected_prefix}-b"
-            or validated_a.get("candidate_queue_sha256")
-            != manifest["candidate_queue_sha256"]
-            or validated_b.get("candidate_queue_sha256")
-            != manifest["candidate_queue_sha256"]
-        ):
-            raise AnnotationSamplingError(
-                f"campaign package identity mismatch: {batch['batch_id']}"
-            )
         report = annotation_progress_report(sample, package_a, package_b)
         reports.append({"batch_id": batch["batch_id"], **report})
-        completed_a += int(report["completed"]["A"])
-        completed_b += int(report["completed"]["B"])
         dual_annotated += int(report["dual_annotated"])
         agreements += int(report["agreements"])
         disagreements += int(report["disagreements"])
