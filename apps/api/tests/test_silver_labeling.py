@@ -8,9 +8,11 @@ from regimpact.annotation_campaign import prepare_campaign
 from regimpact.annotation_sampling import AnnotationSamplingError
 from regimpact.clause_annotations import ClauseCandidate
 from regimpact.silver_labeling import (
+    PROMPT_VERSIONS,
     RESPONSE_SCHEMA_VERSION,
     SILVER_RESPONSE_FORMAT,
     _parse_model_answer,
+    _prompt,
     compile_silver_consensus,
     prepare_silver_experiment,
     run_openai_compatible_labeler,
@@ -175,6 +177,19 @@ def test_silver_response_schema_constrains_taxonomy() -> None:
         "non_obligation",
     ]
     assert schema["additionalProperties"] is False
+
+
+def test_prompt_defines_legal_boundaries_without_inferred_duties() -> None:
+    assert PROMPT_VERSIONS == {
+        "A": "regimpact-silver-prompt-a-v2",
+        "B": "regimpact-silver-prompt-b-v2",
+    }
+    for slot in ("A", "B"):
+        prompt = _prompt(slot)
+        assert "do not infer a duty" in prompt
+        assert "evidentiary rules" in prompt
+        assert "defenses, exemptions" in prompt
+        assert "does not itself create a reporting or retention duty" in prompt
 
 
 def test_labeler_rejects_cached_responses_from_other_stream(tmp_path: Path) -> None:

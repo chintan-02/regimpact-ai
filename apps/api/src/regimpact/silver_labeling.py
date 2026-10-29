@@ -25,7 +25,7 @@ from .clause_classifier import ClauseLabel
 SILVER_SCHEMA_VERSION = "regimpact-silver-experiment-v1"
 REQUEST_SCHEMA_VERSION = "regimpact-silver-label-request-v1"
 RESPONSE_SCHEMA_VERSION = "regimpact-silver-label-response-v1"
-PROMPT_VERSIONS = {"A": "regimpact-silver-prompt-a-v1", "B": "regimpact-silver-prompt-b-v1"}
+PROMPT_VERSIONS = {"A": "regimpact-silver-prompt-a-v2", "B": "regimpact-silver-prompt-b-v2"}
 LABELS = tuple(label.value for label in ClauseLabel)
 SILVER_RESPONSE_FORMAT: dict[str, Any] = {
     "type": "json_schema",
@@ -94,8 +94,19 @@ def _prompt(slot: str) -> str:
             "reporting_requirement, obligation, non_obligation"
         )
     return (
-        "Classify one Canadian regulatory clause. Use exactly one label. "
+        "Classify the direct legal function of one Canadian regulatory clause. "
+        "Use exactly one label and do not infer a duty that the text does not expressly create. "
         f"Consider labels independently in this order: {order}. "
+        "Use reporting_requirement only when an identified actor must submit, disclose, notify, "
+        "file, or report information. Use record_retention_requirement only for an express duty "
+        "to keep, maintain, or retain records. Use prohibition for directly forbidden conduct, "
+        "permission for directly authorized or optional conduct, definition for a term's stated "
+        "meaning or scope, and obligation for another express mandatory action. Use "
+        "non_obligation for procedural or evidentiary rules, enforcement mechanics, penalties, "
+        "defenses, exemptions, exceptions to liability, transitional rules, and descriptive text "
+        "that creates none of those direct duties or permissions. A reference to evidence, "
+        "information, a record, or reporting does not itself create a reporting or retention duty. "
+        "Classify the clause actually provided, not a requirement mentioned inside it. "
         "Return strict JSON with label, confidence from 0 to 1, and a short rationale. "
         "Reporting and retention labels take precedence over generic obligation when applicable."
     )
