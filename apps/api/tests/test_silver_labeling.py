@@ -225,7 +225,6 @@ def test_labeler_rejects_cached_responses_from_other_stream(tmp_path: Path) -> N
         )
 
 
-
 def test_third_model_adjudication_excludes_holdout_and_requires_majority(
     tmp_path: Path,
 ) -> None:

@@ -493,7 +493,6 @@ def human_evaluation_progress(experiment_dir: Path, completed_path: Path) -> dic
     }
 
 
-
 def _sha256_file(path: Path) -> str:
     return sha256(path.read_bytes()).hexdigest()
 
@@ -555,6 +554,13 @@ def prepare_silver_adjudication(
         "held_out_clauses_excluded": sum(
             bool(item["held_out_from_training"]) for item in review
         ),
+        "source_experiment_sha256": _sha256_file(
+            experiment_dir / "silver-experiment-manifest.json"
+        ),
+        "source_request_sha256": {
+            "A": _sha256_file(experiment_dir / "labeler-a-requests.jsonl"),
+            "B": _sha256_file(experiment_dir / "labeler-b-requests.jsonl"),
+        },
         "source_response_sha256": {
             "A": _sha256_file(experiment_dir / "labeler-a-responses.jsonl"),
             "B": _sha256_file(experiment_dir / "labeler-b-responses.jsonl"),
@@ -583,9 +589,16 @@ def compile_silver_adjudication(
     if manifest.get("schema_version") != ADJUDICATION_SCHEMA_VERSION:
         raise AnnotationSamplingError("invalid silver adjudication manifest")
 
+    experiment_path = experiment_dir / "silver-experiment-manifest.json"
+    if _sha256_file(experiment_path) != manifest.get("source_experiment_sha256"):
+        raise AnnotationSamplingError("source experiment fingerprint mismatch")
+
     for slot in ("A", "B"):
-        path = experiment_dir / f"labeler-{slot.lower()}-responses.jsonl"
-        if _sha256_file(path) != manifest["source_response_sha256"].get(slot):
+        request_path = experiment_dir / f"labeler-{slot.lower()}-requests.jsonl"
+        if _sha256_file(request_path) != manifest["source_request_sha256"].get(slot):
+            raise AnnotationSamplingError(f"source labeler {slot} request fingerprint mismatch")
+        response_path = experiment_dir / f"labeler-{slot.lower()}-responses.jsonl"
+        if _sha256_file(response_path) != manifest["source_response_sha256"].get(slot):
             raise AnnotationSamplingError(f"source labeler {slot} response fingerprint mismatch")
 
     requests_path = experiment_dir / "labeler-c-requests.jsonl"
