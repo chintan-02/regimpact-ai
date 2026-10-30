@@ -5,8 +5,14 @@ from pathlib import Path
 import pytest
 
 from regimpact.annotation_campaign import prepare_campaign
-from regimpact.annotation_sampling import AnnotationSamplingError
+from regimpact.annotation_sampling import (
+    AnnotationSamplingError,
+    SampledClause,
+    build_blinded_package,
+    sample_payload,
+)
 from regimpact.clause_annotations import ClauseCandidate
+from regimpact.clause_classifier import ClauseLabel
 from regimpact.silver_labeling import (
     PROMPT_VERSIONS,
     RESPONSE_SCHEMA_VERSION,
@@ -15,6 +21,7 @@ from regimpact.silver_labeling import (
     _prompt,
     compile_silver_adjudication,
     compile_silver_consensus,
+    evaluate_human_silver_labels,
     prepare_silver_adjudication,
     prepare_silver_experiment,
     run_openai_compatible_labeler,
@@ -94,6 +101,7 @@ def test_silver_experiment_is_document_isolated_and_never_promotable(tmp_path: P
         model_b="model-b@revision-2",
     )
     assert manifest["evaluation_clauses"] == 70
+    assert manifest["minimum_confidence"] == 0.80
     assert manifest["training_clauses"] >= 500
     assert manifest["production_promotion_authorized"] is False
     assert manifest["model_training_authorized"] is False
@@ -375,3 +383,223 @@ def test_adjudication_preserves_low_confidence_and_empty_third_stream(
     assert len(unresolved) == experiment_manifest["training_clauses"]
     assert {item["reason"] for item in unresolved} == {"low_confidence_agreement"}
     assert result["unresolved_disagreements"] == experiment_manifest["training_clauses"]
+
+
+def _human_evaluation_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    experiment = tmp_path / "evaluation"
+    experiment.mkdir()
+    sampled = tuple(
+        SampledClause(candidate=_candidate(index), sampling_stratum="obligation")
+        for index in range(70)
+    )
+    records = sample_payload(sampled)
+    (experiment / "human-evaluation-sample.json").write_text(
+        json.dumps({"schema_version": "regimpact-sampled-clauses-v1", "records": records})
+    )
+    package = build_blinded_package(
+        sampled,
+        slot="A",
+        seed="evaluation",
+        candidate_queue_sha256="f" * 64,
+        package_id_prefix="v0.6c7-human-evaluation",
+    )
+    package["annotator_id"] = "single-human-reviewer"
+    human_labels: dict[str, str] = {}
+    labels = [label.value for label in ClauseLabel]
+    for task in package["tasks"]:
+        label = labels[int(task["clause_id"].split("-")[1]) % len(labels)]
+        task["label"] = label
+        task["annotated_at"] = "2026-10-29T12:00:00-06:00"
+        human_labels[task["clause_id"]] = label
+    completed = tmp_path / "completed.json"
+    completed.write_text(json.dumps(package))
+
+    clause_ids = sorted(item["clause_id"] for item in records)
+    clause_ids_sha256 = sha256(
+        json.dumps(clause_ids, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    manifest = {
+        "schema_version": "regimpact-silver-experiment-v1",
+        "evaluation_clauses": 70,
+        "minimum_confidence": 0.8,
+        "evaluation_clause_ids_sha256": clause_ids_sha256,
+        "holdout_documents": sorted({item["document_id"] for item in records}),
+        "labelers": {
+            "A": {
+                "labeler_id": "labeler-a",
+                "model_id": "model-a",
+                "prompt_version": PROMPT_VERSIONS["A"],
+            },
+            "B": {
+                "labeler_id": "labeler-b",
+                "model_id": "model-b",
+                "prompt_version": PROMPT_VERSIONS["B"],
+            },
+        },
+        "model_training_authorized": False,
+        "production_promotion_authorized": False,
+    }
+    (experiment / "silver-experiment-manifest.json").write_text(json.dumps(manifest))
+    for slot in ("A", "B"):
+        config = manifest["labelers"][slot]
+        responses = []
+        for item in records:
+            label = human_labels[item["clause_id"]] if slot == "A" else "obligation"
+            responses.append(
+                {
+                    "schema_version": RESPONSE_SCHEMA_VERSION,
+                    "clause_id": item["clause_id"],
+                    "text_sha256": item["text_sha256"],
+                    "labeler_id": config["labeler_id"],
+                    "model_id": config["model_id"],
+                    "prompt_version": config["prompt_version"],
+                    "label": label,
+                    "confidence": 0.9,
+                    "rationale": "A valid classification rationale.",
+                }
+            )
+        (experiment / f"labeler-{slot.lower()}-responses.jsonl").write_text(
+            "".join(json.dumps(item) + "\n" for item in responses)
+        )
+    return experiment, completed
+
+
+def test_human_silver_evaluation_succeeds_without_exporting_text(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    report, records = evaluate_human_silver_labels(experiment, completed)
+    assert report["single_human_reference"] is True
+    assert report["adjudicated_gold_data"] is False
+    assert report["held_out_from_training"] is True
+    assert report["production_promotion_authorized"] is False
+    assert report["evaluation_clauses"] == 70
+    assert len(records) == 60
+    assert all("text" not in item for item in records)
+    assert all("text_sha256" in item for item in records)
+
+
+def test_human_silver_evaluation_rejects_incomplete_human_labels(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    package = json.loads(completed.read_text())
+    package["tasks"][0]["label"] = None
+    package["tasks"][0]["annotated_at"] = None
+    completed.write_text(json.dumps(package))
+    with pytest.raises(AnnotationSamplingError, match="labels are incomplete"):
+        evaluate_human_silver_labels(experiment, completed)
+
+
+def test_human_silver_evaluation_rejects_missing_model_coverage(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    response_path = experiment / "labeler-a-responses.jsonl"
+    response_path.write_text("\n".join(response_path.read_text().splitlines()[1:]) + "\n")
+    with pytest.raises(AnnotationSamplingError, match="labeler A evaluation coverage mismatch"):
+        evaluate_human_silver_labels(experiment, completed)
+
+
+def test_human_silver_evaluation_rejects_duplicate_clause_ids(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    response_path = experiment / "labeler-b-responses.jsonl"
+    lines = response_path.read_text().splitlines()
+    response_path.write_text("\n".join([*lines, lines[0]]) + "\n")
+    with pytest.raises(AnnotationSamplingError, match="duplicate clause IDs"):
+        evaluate_human_silver_labels(experiment, completed)
+
+
+def test_human_silver_evaluation_rejects_hash_mismatch(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    response_path = experiment / "labeler-a-responses.jsonl"
+    responses = [json.loads(line) for line in response_path.read_text().splitlines()]
+    responses[0]["text_sha256"] = "0" * 64
+    response_path.write_text("".join(json.dumps(item) + "\n" for item in responses))
+    with pytest.raises(AnnotationSamplingError, match="identity or fingerprint mismatch"):
+        evaluate_human_silver_labels(experiment, completed)
+
+
+def test_human_silver_evaluation_metrics_are_correct(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    report, _ = evaluate_human_silver_labels(experiment, completed)
+    metrics_a = report["labelers"]["A"]
+    metrics_b = report["labelers"]["B"]
+    assert metrics_a["accuracy"] == pytest.approx(1.0)
+    assert metrics_a["macro_f1"] == pytest.approx(1.0)
+    assert metrics_a["weighted_f1"] == pytest.approx(1.0)
+    assert metrics_b["accuracy"] == pytest.approx(1 / 7)
+    assert metrics_b["macro_f1"] == pytest.approx(1 / 28)
+    assert metrics_b["weighted_f1"] == pytest.approx(1 / 28)
+    assert metrics_b["per_class"]["obligation"] == {
+        "precision": pytest.approx(1 / 7),
+        "recall": pytest.approx(1.0),
+        "f1": pytest.approx(0.25),
+        "support": 10,
+    }
+    assert len(metrics_b["confusion_matrix"]["matrix"]) == 7
+    assert all(len(row) == 7 for row in metrics_b["confusion_matrix"]["matrix"])
+    assert report["agreement"]["raw_agreement"] == pytest.approx(1 / 7)
+    assert report["agreement"]["consensus_coverage"] == pytest.approx(1 / 7)
+    assert report["agreement"]["consensus_accuracy"] == pytest.approx(1.0)
+    assert report["agreement"]["high_confidence_consensus_coverage"] == pytest.approx(1 / 7)
+    assert report["agreement"]["high_confidence_consensus_accuracy"] == pytest.approx(1.0)
+
+
+def test_human_silver_evaluation_uses_matching_legacy_thresholds(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    manifest_path = experiment / "silver-experiment-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["minimum_confidence"]
+    manifest_path.write_text(json.dumps(manifest))
+    artifacts = {
+        "silver-consensus-report.json": "regimpact-silver-consensus-report-v1",
+        "silver-adjudication-manifest.json": "regimpact-silver-adjudication-v1",
+        "silver-adjudication-report.json": "regimpact-silver-adjudication-report-v1",
+    }
+    for filename, schema_version in artifacts.items():
+        (experiment / filename).write_text(
+            json.dumps({"schema_version": schema_version, "minimum_confidence": 0.8})
+        )
+
+    report, _ = evaluate_human_silver_labels(experiment, completed)
+    assert report["agreement"]["minimum_confidence"] == 0.8
+
+
+def test_human_silver_evaluation_rejects_conflicting_thresholds(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    (experiment / "silver-consensus-report.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "regimpact-silver-consensus-report-v1",
+                "minimum_confidence": 0.9,
+            }
+        )
+    )
+    with pytest.raises(AnnotationSamplingError, match="conflicting governed"):
+        evaluate_human_silver_labels(experiment, completed)
+
+
+@pytest.mark.parametrize("invalid_value", (True, "0.8", -0.1, 1.1))
+def test_human_silver_evaluation_rejects_invalid_thresholds(
+    tmp_path: Path, invalid_value: object
+) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    manifest_path = experiment / "silver-experiment-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["minimum_confidence"]
+    manifest_path.write_text(json.dumps(manifest))
+    (experiment / "silver-consensus-report.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "regimpact-silver-consensus-report-v1",
+                "minimum_confidence": invalid_value,
+            }
+        )
+    )
+    with pytest.raises(AnnotationSamplingError, match="invalid minimum confidence"):
+        evaluate_human_silver_labels(experiment, completed)
+
+
+def test_human_silver_evaluation_requires_governed_threshold(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    manifest_path = experiment / "silver-experiment-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["minimum_confidence"]
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(AnnotationSamplingError, match="no governed artifact"):
+        evaluate_human_silver_labels(experiment, completed)

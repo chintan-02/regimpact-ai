@@ -267,7 +267,8 @@ PYTHONPATH=src python scripts/prepare_silver_experiment.py \
   --model-a MODEL_A \
   --labeler-b-id labeler-b-v1 \
   --model-b MODEL_B \
-  --evaluation-size 70
+  --evaluation-size 70 \
+  --minimum-confidence 0.80
 ```
 
 Run each stream against a separately selected OpenAI-compatible model endpoint. The runner resumes
@@ -312,6 +313,17 @@ Open `human-evaluation-workspace.html`, label its 70 held-out clauses carefully 
 result. This is a single-human evaluation set, not independently adjudicated gold data. The
 experiment may support honest exploratory metrics, but `model_training_authorized` and
 `production_promotion_authorized` remain false in every receipt.
+
+After all 70 human labels are complete, evaluate both immutable model streams and export only
+hash-bound identifiers, labels, confidences and error flags for review (not full regulatory text):
+
+```bash
+PYTHONPATH=src python scripts/evaluate_human_silver_labels.py \
+  --experiment-dir "$REGIMPACT_SILVER_ROOT" \
+  --completed "$REGIMPACT_SILVER_ROOT/v0.6c7-human-evaluation-a-progress.json" \
+  --report "$REGIMPACT_SILVER_ROOT/human-silver-evaluation-report.json" \
+  --disagreements "$REGIMPACT_SILVER_ROOT/human-silver-disagreements.jsonl"
+```
 
 
 ## v0.6C-8 governed third-model adjudication

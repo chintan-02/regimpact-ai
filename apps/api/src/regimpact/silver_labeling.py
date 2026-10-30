@@ -31,6 +31,7 @@ PROMPT_VERSIONS = {
     "C": "regimpact-silver-prompt-c-v1",
 }
 ADJUDICATION_SCHEMA_VERSION = "regimpact-silver-adjudication-v1"
+EVALUATION_SCHEMA_VERSION = "regimpact-human-silver-evaluation-v1"
 LABELS = tuple(label.value for label in ClauseLabel)
 SILVER_RESPONSE_FORMAT: dict[str, Any] = {
     "type": "json_schema",
@@ -153,12 +154,15 @@ def prepare_silver_experiment(
     model_b: str,
     evaluation_size: int = 70,
     seed: str = "v0.6c7-silver-v1",
+    minimum_confidence: float = 0.80,
 ) -> dict[str, Any]:
     """Create two AI request streams and a document-isolated human evaluation workspace."""
     if not all(value.strip() for value in (labeler_a_id, model_a, labeler_b_id, model_b)):
         raise AnnotationSamplingError("labeler and model identities are required")
     if labeler_a_id == labeler_b_id or model_a == model_b:
         raise AnnotationSamplingError("silver labelers require distinct labeler and model IDs")
+    if not 0 <= minimum_confidence <= 1:
+        raise AnnotationSamplingError("minimum confidence must be between zero and one")
     campaign, records = _records(campaign_dir)
     documents = sorted(
         {str(item["document_id"]) for item in records},
@@ -230,6 +234,7 @@ def prepare_silver_experiment(
         "clauses": len(records),
         "training_clauses": len(training),
         "evaluation_clauses": len(evaluation),
+        "minimum_confidence": minimum_confidence,
         "holdout_documents": sorted(holdout_documents),
         "training_clause_ids_sha256": sha256(
             _canonical(sorted(item["clause_id"] for item in training)).encode()
@@ -270,6 +275,7 @@ def _parse_model_answer(content: object) -> tuple[str, float, str]:
         not isinstance(value, dict)
         or set(value) != {"label", "confidence", "rationale"}
         or value.get("label") not in LABELS
+        or isinstance(value.get("confidence"), bool)
         or not isinstance(value.get("confidence"), (int, float))
         or not 0 <= float(value["confidence"]) <= 1
         or not isinstance(value.get("rationale"), str)
@@ -401,7 +407,7 @@ def compile_silver_consensus(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Validate both AI outputs and separate accepted silver labels from review cases."""
     manifest = json.loads((experiment_dir / "silver-experiment-manifest.json").read_text())
-    if manifest.get("schema_version") != SILVER_SCHEMA_VERSION:
+    if not isinstance(manifest, dict) or manifest.get("schema_version") != SILVER_SCHEMA_VERSION:
         raise AnnotationSamplingError("invalid silver experiment manifest")
     if not 0 <= minimum_confidence <= 1:
         raise AnnotationSamplingError("minimum confidence must be between zero and one")
@@ -492,6 +498,317 @@ def human_evaluation_progress(experiment_dir: Path, completed_path: Path) -> dic
         "single_human_review": True,
         "production_promotion_authorized": False,
     }
+
+
+def _classification_metrics(
+    human_labels: list[str], predictions: list[str]
+) -> dict[str, Any]:
+    if len(human_labels) != len(predictions) or not human_labels:
+        raise AnnotationSamplingError("evaluation metric inputs must have equal non-zero coverage")
+    matrix = [[0 for _ in LABELS] for _ in LABELS]
+    label_index = {label: index for index, label in enumerate(LABELS)}
+    for human_label, prediction in zip(human_labels, predictions, strict=True):
+        matrix[label_index[human_label]][label_index[prediction]] += 1
+
+    per_class: dict[str, dict[str, float | int]] = {}
+    f1_values: list[float] = []
+    weighted_f1_total = 0.0
+    for index, label in enumerate(LABELS):
+        true_positive = matrix[index][index]
+        support = sum(matrix[index])
+        predicted = sum(row[index] for row in matrix)
+        precision = true_positive / predicted if predicted else 0.0
+        recall = true_positive / support if support else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        per_class[label] = {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "support": support,
+        }
+        f1_values.append(f1)
+        weighted_f1_total += f1 * support
+
+    total = len(human_labels)
+    correct = sum(matrix[index][index] for index in range(len(LABELS)))
+    return {
+        "accuracy": correct / total,
+        "macro_f1": sum(f1_values) / len(LABELS),
+        "weighted_f1": weighted_f1_total / total,
+        "per_class": per_class,
+        "confusion_matrix": {
+            "labels": list(LABELS),
+            "rows": "human_label",
+            "columns": "prediction",
+            "matrix": matrix,
+        },
+        "prediction_distribution": dict(
+            (label, Counter(predictions).get(label, 0)) for label in LABELS
+        ),
+        "human_label_distribution": dict(
+            (label, Counter(human_labels).get(label, 0)) for label in LABELS
+        ),
+    }
+
+
+def _response_fingerprint(values: list[dict[str, Any]]) -> str:
+    return sha256("\n".join(_canonical(item) for item in values).encode()).hexdigest()
+
+
+def _resolve_minimum_confidence(experiment_dir: Path, manifest: dict[str, Any]) -> float:
+    governed_artifacts = (
+        (
+            "silver-consensus-report.json",
+            "regimpact-silver-consensus-report-v1",
+        ),
+        (
+            "silver-adjudication-manifest.json",
+            ADJUDICATION_SCHEMA_VERSION,
+        ),
+        (
+            "silver-adjudication-report.json",
+            "regimpact-silver-adjudication-report-v1",
+        ),
+    )
+    discovered: list[tuple[str, int | float]] = []
+    if "minimum_confidence" in manifest:
+        discovered.append(
+            ("silver-experiment-manifest.json", manifest["minimum_confidence"])
+        )
+    for filename, schema_version in governed_artifacts:
+        path = experiment_dir / filename
+        if not path.exists():
+            continue
+        try:
+            artifact = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise AnnotationSamplingError(f"invalid governed threshold artifact: {filename}") from exc
+        if not isinstance(artifact, dict) or artifact.get("schema_version") != schema_version:
+            raise AnnotationSamplingError(f"invalid governed threshold artifact: {filename}")
+        if "minimum_confidence" in artifact:
+            discovered.append((filename, artifact["minimum_confidence"]))
+
+    if not discovered:
+        raise AnnotationSamplingError("no governed artifact records minimum confidence")
+    for filename, value in discovered:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not 0 <= value <= 1
+        ):
+            raise AnnotationSamplingError(f"invalid minimum confidence in {filename}")
+    threshold = discovered[0][1]
+    if any(value != threshold for _, value in discovered[1:]):
+        raise AnnotationSamplingError("conflicting governed minimum confidence values")
+    return float(threshold)
+
+
+def evaluate_human_silver_labels(
+    experiment_dir: Path, completed_path: Path
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Evaluate both silver labelers against a complete single-human holdout reference."""
+    manifest_path = experiment_dir / "silver-experiment-manifest.json"
+    sample_path = experiment_dir / "human-evaluation-sample.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        sample_document = json.loads(sample_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise AnnotationSamplingError("invalid human evaluation input") from exc
+    if not isinstance(manifest, dict) or manifest.get("schema_version") != SILVER_SCHEMA_VERSION:
+        raise AnnotationSamplingError("invalid silver experiment manifest")
+    if (
+        manifest.get("evaluation_clauses") != 70
+        or manifest.get("production_promotion_authorized") is not False
+        or manifest.get("model_training_authorized") is not False
+    ):
+        raise AnnotationSamplingError("invalid human evaluation governance metadata")
+    threshold = _resolve_minimum_confidence(experiment_dir, manifest)
+
+    records = sample_document.get("records") if isinstance(sample_document, dict) else None
+    if (
+        not isinstance(sample_document, dict)
+        or sample_document.get("schema_version") != "regimpact-sampled-clauses-v1"
+        or not isinstance(records, list)
+        or len(records) != 70
+        or any(not isinstance(item, dict) for item in records)
+    ):
+        raise AnnotationSamplingError("human evaluation must contain exactly 70 clauses")
+    sample_by_id = {str(item.get("clause_id")): item for item in records}
+    if len(sample_by_id) != len(records):
+        raise AnnotationSamplingError("human evaluation sample contains duplicate clause IDs")
+    evaluation_ids_sha256 = sha256(_canonical(sorted(sample_by_id)).encode()).hexdigest()
+    if manifest.get("evaluation_clause_ids_sha256") != evaluation_ids_sha256:
+        raise AnnotationSamplingError("human evaluation clause identity mismatch")
+    holdout_documents = manifest.get("holdout_documents")
+    if not isinstance(holdout_documents, list) or any(
+        item.get("document_id") not in holdout_documents for item in records
+    ):
+        raise AnnotationSamplingError("human evaluation is not document-held-out")
+    for clause_id, record in sample_by_id.items():
+        text = record.get("text")
+        if (
+            not isinstance(text, str)
+            or record.get("text_sha256") != sha256(text.encode()).hexdigest()
+        ):
+            raise AnnotationSamplingError(f"human evaluation text hash mismatch: {clause_id}")
+
+    package = validate_annotation_package(sample_path, completed_path, expected_slot="A")
+    if package.get("package_id") != "v0.6c7-human-evaluation-a":
+        raise AnnotationSamplingError("human evaluation package identity mismatch")
+    tasks = package["tasks"]
+    incomplete = [item["clause_id"] for item in tasks if item.get("label") is None]
+    if incomplete:
+        raise AnnotationSamplingError("human evaluation labels are incomplete")
+    human_by_id = {str(item["clause_id"]): str(item["label"]) for item in tasks}
+    if set(human_by_id) != set(sample_by_id) or len(human_by_id) != len(tasks):
+        raise AnnotationSamplingError("human evaluation label coverage mismatch")
+
+    identities = manifest.get("labelers")
+    if not isinstance(identities, dict):
+        raise AnnotationSamplingError("invalid silver labeler identities")
+    responses_by_slot: dict[str, dict[str, dict[str, Any]]] = {}
+    response_fingerprints: dict[str, dict[str, str]] = {}
+    for slot in ("A", "B"):
+        expected = identities.get(slot)
+        if (
+            not isinstance(expected, dict)
+            or not all(
+                isinstance(expected.get(field), str) and expected[field].strip()
+                for field in ("labeler_id", "model_id", "prompt_version")
+            )
+        ):
+            raise AnnotationSamplingError(f"invalid labeler {slot} identity")
+        response_path = experiment_dir / f"labeler-{slot.lower()}-responses.jsonl"
+        responses = _load_jsonl(response_path)
+        response_by_id = {str(item.get("clause_id")): item for item in responses}
+        if len(response_by_id) != len(responses):
+            raise AnnotationSamplingError(f"labeler {slot} responses contain duplicate clause IDs")
+        missing = set(sample_by_id) - set(response_by_id)
+        if missing:
+            raise AnnotationSamplingError(f"labeler {slot} evaluation coverage mismatch")
+        evaluation_responses: list[dict[str, Any]] = []
+        for clause_id in sorted(sample_by_id):
+            response = response_by_id[clause_id]
+            if (
+                response.get("schema_version") != RESPONSE_SCHEMA_VERSION
+                or response.get("clause_id") != clause_id
+                or response.get("text_sha256") != sample_by_id[clause_id].get("text_sha256")
+                or response.get("labeler_id") != expected["labeler_id"]
+                or response.get("model_id") != expected["model_id"]
+                or response.get("prompt_version") != expected["prompt_version"]
+            ):
+                raise AnnotationSamplingError(
+                    f"labeler {slot} response identity or fingerprint mismatch: {clause_id}"
+                )
+            _parse_model_answer(
+                _canonical(
+                    {
+                        "label": response.get("label"),
+                        "confidence": response.get("confidence"),
+                        "rationale": response.get("rationale"),
+                    }
+                )
+            )
+            evaluation_responses.append(response)
+        responses_by_slot[slot] = response_by_id
+        response_fingerprints[slot] = {
+            "file_sha256": _sha256_file(response_path),
+            "canonical_stream_sha256": _response_fingerprint(responses),
+            "evaluation_subset_sha256": _response_fingerprint(evaluation_responses),
+        }
+
+    if (
+        identities["A"]["labeler_id"] == identities["B"]["labeler_id"]
+        or identities["A"]["model_id"] == identities["B"]["model_id"]
+    ):
+        raise AnnotationSamplingError("silver labeler identities are not independent")
+
+    clause_ids = sorted(sample_by_id)
+    human_labels = [human_by_id[clause_id] for clause_id in clause_ids]
+    predictions = {
+        slot: [str(responses_by_slot[slot][clause_id]["label"]) for clause_id in clause_ids]
+        for slot in ("A", "B")
+    }
+    labeler_metrics = {
+        slot: {
+            "labeler_id": identities[slot]["labeler_id"],
+            "model_id": identities[slot]["model_id"],
+            **_classification_metrics(human_labels, predictions[slot]),
+        }
+        for slot in ("A", "B")
+    }
+
+    agreements = 0
+    consensus_correct = 0
+    high_confidence_agreements = 0
+    high_confidence_correct = 0
+    records_for_review: list[dict[str, Any]] = []
+    for clause_id in clause_ids:
+        human_label = human_by_id[clause_id]
+        response_a = responses_by_slot["A"][clause_id]
+        response_b = responses_by_slot["B"][clause_id]
+        agreed = response_a["label"] == response_b["label"]
+        high_confidence = agreed and min(
+            float(response_a["confidence"]), float(response_b["confidence"])
+        ) >= float(threshold)
+        consensus_correct_for_clause = agreed and response_a["label"] == human_label
+        agreements += int(agreed)
+        consensus_correct += int(consensus_correct_for_clause)
+        high_confidence_agreements += int(high_confidence)
+        high_confidence_correct += int(high_confidence and consensus_correct_for_clause)
+        error_a = response_a["label"] != human_label
+        error_b = response_b["label"] != human_label
+        if not agreed or error_a or error_b:
+            records_for_review.append(
+                {
+                    "clause_id": clause_id,
+                    "document_id": sample_by_id[clause_id]["document_id"],
+                    "text_sha256": sample_by_id[clause_id]["text_sha256"],
+                    "human_label": human_label,
+                    "label_a": response_a["label"],
+                    "confidence_a": response_a["confidence"],
+                    "label_b": response_b["label"],
+                    "confidence_b": response_b["confidence"],
+                    "labelers_agree": agreed,
+                    "labeler_a_error": error_a,
+                    "labeler_b_error": error_b,
+                    "high_confidence_consensus": high_confidence,
+                }
+            )
+
+    total = len(clause_ids)
+    report = {
+        "schema_version": EVALUATION_SCHEMA_VERSION,
+        "evaluation_clauses": total,
+        "single_human_reference": True,
+        "adjudicated_gold_data": False,
+        "held_out_from_training": True,
+        "production_promotion_authorized": False,
+        "model_training_authorized": False,
+        "human_package_id": package["package_id"],
+        "human_completed_sha256": _sha256_file(completed_path),
+        "human_sample_sha256": package["sample_sha256"],
+        "experiment_manifest_sha256": _sha256_file(manifest_path),
+        "evaluation_clause_ids_sha256": evaluation_ids_sha256,
+        "response_fingerprints": response_fingerprints,
+        "labelers": labeler_metrics,
+        "agreement": {
+            "raw_agreement": agreements / total,
+            "consensus_count": agreements,
+            "consensus_coverage": agreements / total,
+            "consensus_accuracy": consensus_correct / agreements if agreements else None,
+            "minimum_confidence": float(threshold),
+            "high_confidence_consensus_count": high_confidence_agreements,
+            "high_confidence_consensus_coverage": high_confidence_agreements / total,
+            "high_confidence_consensus_accuracy": (
+                high_confidence_correct / high_confidence_agreements
+                if high_confidence_agreements
+                else None
+            ),
+        },
+        "disagreement_or_error_records": len(records_for_review),
+    }
+    return report, records_for_review
 
 
 def _sha256_file(path: Path) -> str:

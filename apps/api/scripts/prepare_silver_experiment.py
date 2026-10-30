@@ -20,6 +20,7 @@ def main() -> None:
     parser.add_argument("--model-b", required=True)
     parser.add_argument("--evaluation-size", type=int, default=70)
     parser.add_argument("--seed", default="v0.6c7-silver-v1")
+    parser.add_argument("--minimum-confidence", type=float, default=0.80)
     args = parser.parse_args()
     result = prepare_silver_experiment(
         args.campaign_dir,
@@ -30,6 +31,7 @@ def main() -> None:
         model_b=args.model_b,
         evaluation_size=args.evaluation_size,
         seed=args.seed,
+        minimum_confidence=args.minimum_confidence,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
 
