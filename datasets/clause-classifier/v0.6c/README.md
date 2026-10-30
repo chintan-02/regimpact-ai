@@ -256,6 +256,17 @@ supervision path can label the 700-clause campaign with two distinct AI models a
 clauses from whole holdout documents for one-person human evaluation. AI consensus labels are
 silver training data, never human ground truth, and cannot produce a production promotion receipt.
 
+### Silver-labelling workflow
+
+The diagram covers package preparation, isolated holdout creation, dual-model responses,
+consensus and review routing, and the final human-versus-AI evaluation.
+
+![Silver-labelling workflow](./assets/silver_labeling_process.svg)
+
+[View the PNG fallback.](./assets/silver_labeling_process.png)
+
+This diagram documents the experimental single-human evaluation workflow. It does not authorize production promotion. Production promotion requires the project’s governed multi-human review and adjudication criteria.
+
 Prepare the experiment with immutable model identities (prefer pinned model revisions):
 
 ```bash
