@@ -20,7 +20,7 @@ def main() -> None:
     parser.add_argument("--silver-labels", type=Path, required=True)
     parser.add_argument("--review-queue", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
-    parser.add_argument("--minimum-confidence", type=float, default=0.80)
+    parser.add_argument("--minimum-confidence", type=float)
     args = parser.parse_args()
     accepted, review, report = compile_silver_consensus(
         args.experiment_dir, minimum_confidence=args.minimum_confidence

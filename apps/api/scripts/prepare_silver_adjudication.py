@@ -15,7 +15,7 @@ def main() -> None:
     parser.add_argument("--experiment-dir", type=Path, required=True)
     parser.add_argument("--labeler-c-id", required=True)
     parser.add_argument("--model-c", required=True)
-    parser.add_argument("--minimum-confidence", type=float, default=0.80)
+    parser.add_argument("--minimum-confidence", type=float)
     args = parser.parse_args()
     manifest = prepare_silver_adjudication(
         args.experiment_dir,

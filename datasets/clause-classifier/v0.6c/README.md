@@ -256,6 +256,17 @@ supervision path can label the 700-clause campaign with two distinct AI models a
 clauses from whole holdout documents for one-person human evaluation. AI consensus labels are
 silver training data, never human ground truth, and cannot produce a production promotion receipt.
 
+### Silver-labelling workflow
+
+The diagram covers package preparation, isolated holdout creation, dual-model responses,
+consensus and review routing, and the final human-versus-AI evaluation.
+
+![Silver-labelling workflow](./assets/silver_labeling_process.svg)
+
+[View the PNG fallback.](./assets/silver_labeling_process.png)
+
+This diagram documents the experimental single-human evaluation workflow. It does not authorize production promotion. Production promotion requires the project’s governed multi-human review and adjudication criteria.
+
 Prepare the experiment with immutable model identities (prefer pinned model revisions):
 
 ```bash
@@ -267,7 +278,8 @@ PYTHONPATH=src python scripts/prepare_silver_experiment.py \
   --model-a MODEL_A \
   --labeler-b-id labeler-b-v1 \
   --model-b MODEL_B \
-  --evaluation-size 70
+  --evaluation-size 70 \
+  --minimum-confidence 0.80
 ```
 
 Run each stream against a separately selected OpenAI-compatible model endpoint. The runner resumes
@@ -312,6 +324,17 @@ Open `human-evaluation-workspace.html`, label its 70 held-out clauses carefully 
 result. This is a single-human evaluation set, not independently adjudicated gold data. The
 experiment may support honest exploratory metrics, but `model_training_authorized` and
 `production_promotion_authorized` remain false in every receipt.
+
+After all 70 human labels are complete, evaluate both immutable model streams and export only
+hash-bound identifiers, labels, confidences and error flags for review (not full regulatory text):
+
+```bash
+PYTHONPATH=src python scripts/evaluate_human_silver_labels.py \
+  --experiment-dir "$REGIMPACT_SILVER_ROOT" \
+  --completed "$REGIMPACT_SILVER_ROOT/v0.6c7-human-evaluation-a-progress.json" \
+  --report "$REGIMPACT_SILVER_ROOT/human-silver-evaluation-report.json" \
+  --disagreements "$REGIMPACT_SILVER_ROOT/human-silver-disagreements.jsonl"
+```
 
 
 ## v0.6C-8 governed third-model adjudication
