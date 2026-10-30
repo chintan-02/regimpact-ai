@@ -1,6 +1,7 @@
 import json
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -79,6 +80,32 @@ def _write_responses(experiment: Path, slot: str, *, confidence: float = 0.9) ->
     (experiment / f"labeler-{slot.lower()}-responses.jsonl").write_text(
         "".join(json.dumps(item) + "\n" for item in responses)
     )
+
+
+def _complete_silver_experiment(
+    tmp_path: Path, *, minimum_confidence: float = 0.80, response_confidence: float = 0.90
+) -> tuple[Path, dict[str, Any]]:
+    campaign = tmp_path / "campaign"
+    prepare_campaign(
+        tuple(_candidate(index) for index in range(700)),
+        candidate_queue_sha256="f" * 64,
+        output_dir=campaign,
+        target=700,
+        seed="fixed",
+    )
+    experiment = tmp_path / "experiment"
+    manifest = prepare_silver_experiment(
+        campaign,
+        experiment,
+        labeler_a_id="labeler-a",
+        model_a="model-a",
+        labeler_b_id="labeler-b",
+        model_b="model-b",
+        minimum_confidence=minimum_confidence,
+    )
+    _write_responses(experiment, "A", confidence=response_confidence)
+    _write_responses(experiment, "B", confidence=response_confidence)
+    return experiment, manifest
 
 
 def test_silver_experiment_is_document_isolated_and_never_promotable(tmp_path: Path) -> None:
@@ -385,6 +412,87 @@ def test_adjudication_preserves_low_confidence_and_empty_third_stream(
     assert result["unresolved_disagreements"] == experiment_manifest["training_clauses"]
 
 
+def test_consensus_uses_experiment_minimum_confidence(tmp_path: Path) -> None:
+    experiment, _ = _complete_silver_experiment(
+        tmp_path, minimum_confidence=0.95, response_confidence=0.95
+    )
+    _, _, report = compile_silver_consensus(experiment)
+    assert report["minimum_confidence"] == 0.95
+
+
+def test_consensus_rejects_responses_below_experiment_threshold(tmp_path: Path) -> None:
+    experiment, _ = _complete_silver_experiment(
+        tmp_path, minimum_confidence=0.95, response_confidence=0.90
+    )
+    accepted, review, _ = compile_silver_consensus(experiment)
+    assert accepted == []
+    assert len(review) == 700
+
+
+def test_consensus_rejects_conflicting_explicit_threshold(tmp_path: Path) -> None:
+    experiment, _ = _complete_silver_experiment(tmp_path, minimum_confidence=0.95)
+    with pytest.raises(AnnotationSamplingError, match="conflicts with the experiment manifest"):
+        compile_silver_consensus(experiment, minimum_confidence=0.90)
+
+
+def test_adjudication_inherits_experiment_minimum_confidence(tmp_path: Path) -> None:
+    experiment, _ = _complete_silver_experiment(tmp_path, minimum_confidence=0.95)
+    manifest = prepare_silver_adjudication(
+        experiment,
+        labeler_c_id="labeler-c",
+        model_c="model-c",
+    )
+    assert manifest["minimum_confidence"] == 0.95
+
+
+def test_adjudication_rejects_conflicting_threshold_before_writes(tmp_path: Path) -> None:
+    experiment, _ = _complete_silver_experiment(tmp_path, minimum_confidence=0.95)
+    with pytest.raises(AnnotationSamplingError, match="conflicts with the experiment manifest"):
+        prepare_silver_adjudication(
+            experiment,
+            labeler_c_id="labeler-c",
+            model_c="model-c",
+            minimum_confidence=0.90,
+        )
+    assert not (experiment / "labeler-c-requests.jsonl").exists()
+    assert not (experiment / "silver-adjudication-manifest.json").exists()
+
+
+def test_legacy_experiment_uses_historical_minimum_confidence(tmp_path: Path) -> None:
+    experiment, manifest = _complete_silver_experiment(
+        tmp_path, minimum_confidence=0.80, response_confidence=0.80
+    )
+    manifest_path = experiment / "silver-experiment-manifest.json"
+    del manifest["minimum_confidence"]
+    manifest_path.write_text(json.dumps(manifest))
+    accepted, _, report = compile_silver_consensus(experiment)
+    assert len(accepted) == manifest["training_clauses"]
+    assert report["minimum_confidence"] == 0.80
+
+
+@pytest.mark.parametrize(
+    ("recorded_threshold", "explicit_threshold"),
+    (
+        (True, None),
+        (-0.01, None),
+        (1.01, None),
+        (0.80, True),
+        (0.80, -0.01),
+        (0.80, 1.01),
+    ),
+)
+def test_consensus_rejects_invalid_minimum_confidence(
+    tmp_path: Path,
+    recorded_threshold: float | bool,
+    explicit_threshold: float | bool | None,
+) -> None:
+    experiment, manifest = _complete_silver_experiment(tmp_path)
+    manifest["minimum_confidence"] = recorded_threshold
+    (experiment / "silver-experiment-manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(AnnotationSamplingError, match="invalid minimum confidence"):
+        compile_silver_consensus(experiment, minimum_confidence=explicit_threshold)
+
+
 def _human_evaluation_fixture(tmp_path: Path) -> tuple[Path, Path]:
     experiment = tmp_path / "evaluation"
     experiment.mkdir()
@@ -418,7 +526,7 @@ def _human_evaluation_fixture(tmp_path: Path) -> tuple[Path, Path]:
     clause_ids_sha256 = sha256(
         json.dumps(clause_ids, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    manifest = {
+    manifest: dict[str, Any] = {
         "schema_version": "regimpact-silver-experiment-v1",
         "evaluation_clauses": 70,
         "minimum_confidence": 0.8,

@@ -402,15 +402,37 @@ def run_openai_compatible_labeler(
     }
 
 
+def _resolve_experiment_minimum_confidence(
+    manifest: dict[str, Any], explicit_threshold: float | None = None
+) -> float:
+    recorded_threshold = manifest.get("minimum_confidence", 0.80)
+    for source, value in (
+        ("experiment manifest", recorded_threshold),
+        ("explicit override", explicit_threshold),
+    ):
+        if value is None:
+            continue
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not 0 <= value <= 1
+        ):
+            raise AnnotationSamplingError(f"invalid minimum confidence in {source}")
+    if explicit_threshold is not None and explicit_threshold != recorded_threshold:
+        raise AnnotationSamplingError(
+            "explicit minimum confidence conflicts with the experiment manifest"
+        )
+    return float(recorded_threshold)
+
+
 def compile_silver_consensus(
-    experiment_dir: Path, *, minimum_confidence: float = 0.80
+    experiment_dir: Path, *, minimum_confidence: float | None = None
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Validate both AI outputs and separate accepted silver labels from review cases."""
     manifest = json.loads((experiment_dir / "silver-experiment-manifest.json").read_text())
     if not isinstance(manifest, dict) or manifest.get("schema_version") != SILVER_SCHEMA_VERSION:
         raise AnnotationSamplingError("invalid silver experiment manifest")
-    if not 0 <= minimum_confidence <= 1:
-        raise AnnotationSamplingError("minimum confidence must be between zero and one")
+    threshold = _resolve_experiment_minimum_confidence(manifest, minimum_confidence)
     outputs: dict[str, dict[str, dict[str, Any]]] = {}
     for slot in ("A", "B"):
         requests = _load_jsonl(experiment_dir / f"labeler-{slot.lower()}-requests.jsonl")
@@ -451,7 +473,7 @@ def compile_silver_consensus(
     for clause_id, request in requests_a.items():
         a, b = outputs["A"][clause_id], outputs["B"][clause_id]
         agreed = a["label"] == b["label"]
-        confident = min(float(a["confidence"]), float(b["confidence"])) >= minimum_confidence
+        confident = min(float(a["confidence"]), float(b["confidence"])) >= threshold
         held_out = request["document_id"] in holdout_documents
         item = {
             "clause_id": clause_id,
@@ -475,7 +497,7 @@ def compile_silver_consensus(
         "accepted_training_labels": len(accepted),
         "routed_for_review": len(review),
         "evaluation_clauses": len(evaluation_ids),
-        "minimum_confidence": minimum_confidence,
+        "minimum_confidence": threshold,
         "label_distribution": dict(sorted(Counter(item["label"] for item in accepted).items())),
         "experimental_training_eligible": len(accepted) >= 500,
         "silver_labels_are_human_ground_truth": False,
@@ -820,13 +842,11 @@ def prepare_silver_adjudication(
     *,
     labeler_c_id: str,
     model_c: str,
-    minimum_confidence: float = 0.80,
+    minimum_confidence: float | None = None,
 ) -> dict[str, Any]:
     """Create an immutable third-model stream for non-held-out A/B disagreements."""
     if not labeler_c_id.strip() or not model_c.strip():
         raise AnnotationSamplingError("third labeler and model identities are required")
-    if not 0 <= minimum_confidence <= 1:
-        raise AnnotationSamplingError("minimum confidence must be between zero and one")
     manifest_path = experiment_dir / "silver-adjudication-manifest.json"
     requests_path = experiment_dir / "labeler-c-requests.jsonl"
     if manifest_path.exists() or requests_path.exists():
@@ -837,6 +857,7 @@ def prepare_silver_adjudication(
     )
     if experiment.get("schema_version") != SILVER_SCHEMA_VERSION:
         raise AnnotationSamplingError("invalid silver experiment manifest")
+    threshold = _resolve_experiment_minimum_confidence(experiment, minimum_confidence)
     identities = experiment.get("labelers")
     if not isinstance(identities, dict):
         raise AnnotationSamplingError("invalid silver labeler identities")
@@ -848,7 +869,7 @@ def prepare_silver_adjudication(
             raise AnnotationSamplingError("third adjudicator must use a distinct identity and model")
 
     accepted, review, _ = compile_silver_consensus(
-        experiment_dir, minimum_confidence=minimum_confidence
+        experiment_dir, minimum_confidence=threshold
     )
     disagreements = [
         item
@@ -866,7 +887,7 @@ def prepare_silver_adjudication(
         "status": "awaiting_third_model",
         "source_experiment_schema_version": experiment["schema_version"],
         "source_experiment_seed": experiment["seed"],
-        "minimum_confidence": minimum_confidence,
+        "minimum_confidence": threshold,
         "base_accepted_labels": len(accepted),
         "eligible_disagreements": len(disagreements),
         "held_out_clauses_excluded": sum(
