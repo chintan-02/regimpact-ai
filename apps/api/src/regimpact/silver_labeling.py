@@ -542,12 +542,12 @@ def _classification_metrics(
             "columns": "prediction",
             "matrix": matrix,
         },
-        "prediction_distribution": dict(
-            (label, Counter(predictions).get(label, 0)) for label in LABELS
-        ),
-        "human_label_distribution": dict(
-            (label, Counter(human_labels).get(label, 0)) for label in LABELS
-        ),
+        "prediction_distribution": {
+            label: Counter(predictions).get(label, 0) for label in LABELS
+        },
+        "human_label_distribution": {
+            label: Counter(human_labels).get(label, 0) for label in LABELS
+        },
     }
 
 
