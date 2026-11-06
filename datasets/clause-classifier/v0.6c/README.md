@@ -336,6 +336,24 @@ PYTHONPATH=src python scripts/evaluate_human_silver_labels.py \
   --disagreements "$REGIMPACT_SILVER_ROOT/human-silver-disagreements.jsonl"
 ```
 
+Package the validated result as reproducible experiment evidence. The command writes an atomic,
+text-free output directory containing the evaluation report, disagreement records, a concise
+Markdown summary and a receipt that binds every output and upstream input with SHA-256. Use a new
+output directory for each governed run; an existing directory is rejected rather than overwritten.
+
+```bash
+PYTHONPATH=src python scripts/package_human_silver_evaluation.py \
+  --experiment-dir "$REGIMPACT_SILVER_ROOT" \
+  --completed "/absolute/path/to/v0.6c7-human-evaluation-a-progress.json" \
+  --output-dir "$REGIMPACT_SILVER_ROOT/evidence/human-evaluation-v1" \
+  --implementation-commit "$(git rev-parse HEAD)"
+```
+
+The package is exploratory evaluation evidence. It deliberately excludes full regulatory text and
+does not turn a single annotator's labels into adjudicated ground truth, authorize model training or
+authorize production promotion. Keep the original completed annotation export separately; the
+receipt records its hash without copying it into the evidence directory.
+
 
 ## v0.6C-8 governed third-model adjudication
 

@@ -14,6 +14,13 @@ from regimpact.annotation_sampling import (
 )
 from regimpact.clause_annotations import ClauseCandidate
 from regimpact.clause_classifier import ClauseLabel
+from regimpact.human_evaluation_evidence import (
+    DISAGREEMENTS_FILENAME,
+    RECEIPT_FILENAME,
+    REPORT_FILENAME,
+    SUMMARY_FILENAME,
+    package_human_silver_evaluation,
+)
 from regimpact.silver_labeling import (
     PROMPT_VERSIONS,
     RESPONSE_SCHEMA_VERSION,
@@ -711,3 +718,77 @@ def test_human_silver_evaluation_requires_governed_threshold(tmp_path: Path) -> 
     manifest_path.write_text(json.dumps(manifest))
     with pytest.raises(AnnotationSamplingError, match="no governed artifact"):
         evaluate_human_silver_labels(experiment, completed)
+
+
+def test_human_evaluation_evidence_package_is_hash_bound_and_text_free(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    output_dir = tmp_path / "evidence"
+
+    receipt = package_human_silver_evaluation(
+        experiment, completed, output_dir, implementation_commit="a" * 40
+    )
+
+    assert receipt["single_human_reference"] is True
+    assert receipt["adjudicated_gold_data"] is False
+    assert receipt["model_training_authorized"] is False
+    assert receipt["production_promotion_authorized"] is False
+    assert {item["name"] for item in receipt["inputs"]} >= {
+        "silver-experiment-manifest.json",
+        "human-evaluation-sample.json",
+        "labeler-a-responses.jsonl",
+        "labeler-b-responses.jsonl",
+        "completed-human-evaluation.json",
+    }
+    for item in receipt["outputs"]:
+        value = (output_dir / str(item["name"])).read_bytes()
+        assert sha256(value).hexdigest() == item["sha256"]
+        assert len(value) == item["size_bytes"]
+
+    exported = "\n".join(
+        (output_dir / name).read_text()
+        for name in (REPORT_FILENAME, DISAGREEMENTS_FILENAME, SUMMARY_FILENAME, RECEIPT_FILENAME)
+    )
+    assert "Every institution shall maintain controls" not in exported
+    assert "production promotion authorized by this package: no" in exported.lower()
+
+
+def test_human_evaluation_evidence_package_is_reproducible(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    first = tmp_path / "evidence-first"
+    second = tmp_path / "evidence-second"
+
+    package_human_silver_evaluation(
+        experiment, completed, first, implementation_commit="a" * 40
+    )
+    package_human_silver_evaluation(
+        experiment, completed, second, implementation_commit="a" * 40
+    )
+
+    assert {path.name: path.read_bytes() for path in first.iterdir()} == {
+        path.name: path.read_bytes() for path in second.iterdir()
+    }
+
+
+def test_human_evaluation_evidence_package_refuses_existing_output(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+    output_dir = tmp_path / "evidence"
+    output_dir.mkdir()
+
+    with pytest.raises(AnnotationSamplingError, match="output directory already exists"):
+        package_human_silver_evaluation(
+            experiment, completed, output_dir, implementation_commit="a" * 40
+        )
+
+    assert list(output_dir.iterdir()) == []
+
+
+def test_human_evaluation_evidence_package_rejects_short_commit(tmp_path: Path) -> None:
+    experiment, completed = _human_evaluation_fixture(tmp_path)
+
+    with pytest.raises(AnnotationSamplingError, match="full lowercase Git SHA"):
+        package_human_silver_evaluation(
+            experiment,
+            completed,
+            tmp_path / "evidence",
+            implementation_commit="abc123",
+        )
