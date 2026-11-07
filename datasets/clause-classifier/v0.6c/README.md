@@ -354,8 +354,64 @@ does not turn a single annotator's labels into adjudicated ground truth, authori
 authorize production promotion. Keep the original completed annotation export separately; the
 receipt records its hash without copying it into the evidence directory.
 
+## v0.6C-8 multi-human holdout comparison and adjudication
 
-## v0.6C-8 governed third-model adjudication
+Experiment preparation also creates `human-evaluation-package-b.json` and
+`human-evaluation-workspace-b.html` from the same fixed 70-clause sample. The existing slot-A
+package, workspace, evaluator and single-human evidence package are unchanged. Give the A and B
+workspaces to different named humans. Neither workspace contains model predictions, confidence,
+rationales or the other human's labels. Do not provide either model response stream or comparison
+output to an annotator until both independent exports are complete.
+
+Save the exports outside Git, then compare them only after all 70 tasks in both slots are complete:
+
+The following workflow shows independent annotation, package validation, human-human agreement measurement, mandatory disagreement resolution and the final governance boundary.
+
+![v0.6C multi-human annotation and adjudication workflow](./assets/human_annotation_adjudication_flow.svg)
+
+[View the PNG fallback](./assets/human_annotation_adjudication_flow.png) · [View the editable Mermaid source](./assets/human_annotation_adjudication_flow.mmd)
+
+```bash
+cd apps/api
+PYTHONPATH=src python scripts/compare_human_annotations.py \
+  --experiment-dir "$REGIMPACT_SILVER_ROOT" \
+  --completed-a "$REGIMPACT_SILVER_ROOT/v0.6c7-human-evaluation-a-progress.json" \
+  --completed-b "$REGIMPACT_SILVER_ROOT/v0.6c7-human-evaluation-b-progress.json" \
+  --report "$REGIMPACT_SILVER_ROOT/human-annotation-comparison.json" \
+  --adjudication-package "$REGIMPACT_SILVER_ROOT/human-adjudication.json"
+```
+
+The command validates the exact sample identity and SHA-256, package identities, independently
+deterministic A/B ordering, slots, distinct non-empty human identities, complete coverage, immutable
+clause hashes and the seven allowed labels. The report contains raw agreement, Cohen's kappa,
+per-class positive and binary agreement, a seven-by-seven confusion matrix and the disagreement
+count. Its adjudication package is text-free: it contains only clause IDs, hashes, labels, fixed
+reason codes and governance metadata. Every disagreement is present and initially unresolved.
+
+Give only `human-adjudication.json` to a third human who is not annotator A or B. Set the package-level
+`adjudicator_id` and timezone-aware `adjudicated_at`, then set `adjudicated_label` and one
+`adjudication_reason_code` on every record. Allowed reason codes are recorded in the package; no
+free-text rationale or regulatory text may be added. Compile only when every disagreement is
+resolved:
+
+```bash
+PYTHONPATH=src python scripts/compile_human_adjudication.py \
+  --experiment-dir "$REGIMPACT_SILVER_ROOT" \
+  --completed-a "$REGIMPACT_SILVER_ROOT/v0.6c7-human-evaluation-a-progress.json" \
+  --completed-b "$REGIMPACT_SILVER_ROOT/v0.6c7-human-evaluation-b-progress.json" \
+  --adjudication-package "$REGIMPACT_SILVER_ROOT/human-adjudication.json" \
+  --report "$REGIMPACT_SILVER_ROOT/human-adjudication-report.json" \
+  --resolved-labels "$REGIMPACT_SILVER_ROOT/human-adjudicated-labels.jsonl"
+```
+
+Compilation rejects missing, duplicated, reordered, altered or unresolved disagreements and emits
+text-free resolved labels for all 70 clauses. Successful adjudication records governed human
+resolution; it still sets `model_training_authorized` and `production_promotion_authorized` to
+false. Training or promotion requires a separate explicit governance decision and the existing
+dataset, evaluation and promotion gates.
+
+
+## v0.6C-9 governed third-model adjudication
 
 When the two silver labelers disagree, prepare a third independent model stream from only the
 non-held-out disagreements. The command fingerprints both original response streams, excludes all

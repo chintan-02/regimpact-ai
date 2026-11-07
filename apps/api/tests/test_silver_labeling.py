@@ -14,6 +14,10 @@ from regimpact.annotation_sampling import (
 )
 from regimpact.clause_annotations import ClauseCandidate
 from regimpact.clause_classifier import ClauseLabel
+from regimpact.human_annotation_adjudication import (
+    compare_human_annotations,
+    compile_human_adjudication,
+)
 from regimpact.human_evaluation_evidence import (
     DISAGREEMENTS_FILENAME,
     RECEIPT_FILENAME,
@@ -141,6 +145,14 @@ def test_silver_experiment_is_document_isolated_and_never_promotable(tmp_path: P
     assert manifest["model_training_authorized"] is False
     evaluation = json.loads((experiment / "human-evaluation-sample.json").read_text())["records"]
     assert {item["document_id"] for item in evaluation} <= set(manifest["holdout_documents"])
+    human_b = json.loads((experiment / "human-evaluation-package-b.json").read_text())
+    assert human_b["annotator_slot"] == "B"
+    assert human_b["sample_sha256"] == json.loads(
+        (experiment / "human-evaluation-package.json").read_text()
+    )["sample_sha256"]
+    assert all(task["label"] is None for task in human_b["tasks"])
+    assert all("prediction" not in task for task in human_b["tasks"])
+    assert (experiment / "human-evaluation-workspace-b.html").exists()
 
     _write_responses(experiment, "A")
     _write_responses(experiment, "B")
@@ -535,6 +547,7 @@ def _human_evaluation_fixture(tmp_path: Path) -> tuple[Path, Path]:
     ).hexdigest()
     manifest: dict[str, Any] = {
         "schema_version": "regimpact-silver-experiment-v1",
+        "seed": "evaluation",
         "evaluation_clauses": 70,
         "minimum_confidence": 0.8,
         "evaluation_clause_ids_sha256": clause_ids_sha256,
@@ -577,6 +590,37 @@ def _human_evaluation_fixture(tmp_path: Path) -> tuple[Path, Path]:
             "".join(json.dumps(item) + "\n" for item in responses)
         )
     return experiment, completed
+
+
+def _multi_human_evaluation_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
+    experiment, completed_a = _human_evaluation_fixture(tmp_path)
+    package_a = json.loads(completed_a.read_text())
+    package_a["annotator_id"] = "human-a"
+    completed_a.write_text(json.dumps(package_a))
+
+    sampled = tuple(
+        SampledClause(candidate=_candidate(index), sampling_stratum="obligation")
+        for index in range(70)
+    )
+    package_b = build_blinded_package(
+        sampled,
+        slot="B",
+        seed="evaluation",
+        candidate_queue_sha256="f" * 64,
+        package_id_prefix="v0.6c7-human-evaluation",
+    )
+    package_b["annotator_id"] = "human-b"
+    labels_a = {task["clause_id"]: task["label"] for task in package_a["tasks"]}
+    labels = [label.value for label in ClauseLabel]
+    for task in package_b["tasks"]:
+        label = labels_a[task["clause_id"]]
+        if task["clause_id"] in {"clause-0000", "clause-0001"}:
+            label = labels[(labels.index(label) + 1) % len(labels)]
+        task["label"] = label
+        task["annotated_at"] = "2026-10-30T12:00:00-06:00"
+    completed_b = tmp_path / "completed-b.json"
+    completed_b.write_text(json.dumps(package_b))
+    return experiment, completed_a, completed_b
 
 
 def test_human_silver_evaluation_succeeds_without_exporting_text(tmp_path: Path) -> None:
@@ -792,3 +836,120 @@ def test_human_evaluation_evidence_package_rejects_short_commit(tmp_path: Path) 
             tmp_path / "evidence",
             implementation_commit="abc123",
         )
+
+
+def test_multi_human_comparison_rejects_clause_identity_mismatch(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+    package_b = json.loads(completed_b.read_text())
+    package_b["tasks"][0]["text_sha256"] = "0" * 64
+    completed_b.write_text(json.dumps(package_b))
+
+    with pytest.raises(AnnotationSamplingError, match="task was modified"):
+        compare_human_annotations(experiment, completed_a, completed_b)
+
+
+def test_multi_human_comparison_rejects_same_annotator_identity(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+    package_b = json.loads(completed_b.read_text())
+    package_b["annotator_id"] = "human-a"
+    completed_b.write_text(json.dumps(package_b))
+
+    with pytest.raises(AnnotationSamplingError, match="distinct annotator identities"):
+        compare_human_annotations(experiment, completed_a, completed_b)
+
+
+def test_multi_human_comparison_rejects_embedded_model_predictions(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+    package_b = json.loads(completed_b.read_text())
+    package_b["tasks"][0]["model_prediction"] = "obligation"
+    completed_b.write_text(json.dumps(package_b))
+
+    with pytest.raises(AnnotationSamplingError, match="non-annotation fields"):
+        compare_human_annotations(experiment, completed_a, completed_b)
+
+
+def test_multi_human_comparison_rejects_incomplete_coverage(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+    package_b = json.loads(completed_b.read_text())
+    package_b["tasks"][0]["label"] = None
+    package_b["tasks"][0]["annotated_at"] = None
+    completed_b.write_text(json.dumps(package_b))
+
+    with pytest.raises(AnnotationSamplingError, match="labels are incomplete"):
+        compare_human_annotations(experiment, completed_a, completed_b)
+
+
+def test_multi_human_comparison_rejects_slot_mismatch(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+    package_b = json.loads(completed_b.read_text())
+    package_b["annotator_slot"] = "A"
+    completed_b.write_text(json.dumps(package_b))
+
+    with pytest.raises(AnnotationSamplingError, match="metadata mismatch"):
+        compare_human_annotations(experiment, completed_a, completed_b)
+
+
+def test_multi_human_comparison_rejects_invalid_labels(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+    package_b = json.loads(completed_b.read_text())
+    package_b["tasks"][0]["label"] = "not-a-label"
+    completed_b.write_text(json.dumps(package_b))
+
+    with pytest.raises(AnnotationSamplingError, match="incomplete task"):
+        compare_human_annotations(experiment, completed_a, completed_b)
+
+
+def test_multi_human_comparison_output_is_deterministic_and_text_free(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+
+    first = compare_human_annotations(experiment, completed_a, completed_b)
+    second = compare_human_annotations(experiment, completed_a, completed_b)
+
+    assert first == second
+    report, adjudication = first
+    assert report["raw_agreement"] == pytest.approx(68 / 70)
+    assert isinstance(report["cohens_kappa"], float)
+    assert report["disagreement_count"] == 2
+    assert len(report["confusion_matrix"]["matrix"]) == 7
+    assert set(report["per_class_agreement"]) == {label.value for label in ClauseLabel}
+    assert adjudication["disagreement_count"] == 2
+    assert "Every institution shall" not in json.dumps(adjudication)
+    assert adjudication["model_predictions_included"] is False
+    assert adjudication["model_training_authorized"] is False
+    assert adjudication["production_promotion_authorized"] is False
+
+
+def test_multi_human_adjudication_rejects_unresolved_disagreements(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+    _, adjudication = compare_human_annotations(experiment, completed_a, completed_b)
+    adjudication["adjudicator_id"] = "independent-adjudicator"
+    adjudication["adjudicated_at"] = "2026-11-06T12:00:00-07:00"
+    path = tmp_path / "adjudication.json"
+    path.write_text(json.dumps(adjudication))
+
+    with pytest.raises(AnnotationSamplingError, match="unresolved human disagreement"):
+        compile_human_adjudication(experiment, completed_a, completed_b, path)
+
+
+def test_multi_human_adjudication_succeeds_for_every_disagreement(tmp_path: Path) -> None:
+    experiment, completed_a, completed_b = _multi_human_evaluation_fixture(tmp_path)
+    _, adjudication = compare_human_annotations(experiment, completed_a, completed_b)
+    adjudication["adjudicator_id"] = "independent-adjudicator"
+    adjudication["adjudicated_at"] = "2026-11-06T12:00:00-07:00"
+    for record in adjudication["records"]:
+        record["adjudicated_label"] = record["label_a"]
+        record["adjudication_reason_code"] = "taxonomy_boundary"
+    path = tmp_path / "adjudication.json"
+    path.write_text(json.dumps(adjudication))
+
+    report, resolved = compile_human_adjudication(
+        experiment, completed_a, completed_b, path
+    )
+
+    assert report["status"] == "adjudication_complete"
+    assert report["adjudicated_disagreement_count"] == 2
+    assert report["unresolved_disagreement_count"] == 0
+    assert report["model_training_authorized"] is False
+    assert report["production_promotion_authorized"] is False
+    assert len(resolved) == 70
+    assert all("text" not in record for record in resolved)
