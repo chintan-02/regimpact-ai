@@ -1,0 +1,36 @@
+flowchart TD
+    Start(["Start"]) --> Sample["Fixed 70-clause document-held-out evaluation sample"]
+    Sample --> Packages["Generate two blinded annotation packages"]
+
+    Packages --> PackA["Human A package · slot A"]
+    Packages --> PackB["Human B package · slot B"]
+
+    subgraph IndependentAnnotation["Independent annotation"]
+        direction LR
+        PackA --> HumanA["Human A annotates independently<br/>Cannot see model predictions or Human B labels"]
+        PackB --> HumanB["Human B annotates independently<br/>Cannot see model predictions or Human A labels"]
+    end
+
+    HumanA --> Validate["Validate both completed packages<br/>Exact sample and clause hashes<br/>Complete 70-clause coverage<br/>Valid labels and correct slots<br/>Different annotator identities"]
+    HumanB --> Validate
+
+    Validate --> PackagesValid{"Are both packages valid?"}
+    PackagesValid -->|No| Error1[["Stop · AnnotationSamplingError"]]
+    PackagesValid -->|Yes| Compare["Compare annotations"]
+
+    Compare --> Metrics[["Generated evidence<br/>Raw agreement<br/>Cohen's kappa<br/>Per-class agreement<br/>Confusion matrix"]]
+    Metrics --> Disagree{"Do human labels disagree?"}
+
+    Disagree -->|No| Preserve["Preserve agreed labels"]
+    Disagree -->|Yes| AdjudicationPackage[["Create text-free adjudication package<br/>Clause IDs, hashes, and labels"]]
+
+    AdjudicationPackage --> Adjudicator["Authorized adjudicator resolves every disagreement<br/>Use a controlled reason code"]
+    Adjudicator --> ValidateAdj["Validate completed adjudication package<br/>Adjudicator identity<br/>Valid resolved labels<br/>All disagreements resolved<br/>Exact clause and package hashes"]
+
+    ValidateAdj --> Resolved{"Are all disagreements validly resolved?"}
+    Resolved -->|No| Error2[["Stop · AnnotationSamplingError"]]
+    Resolved -->|Yes| Compile["Compile resolved-label artifact and adjudication report"]
+
+    Preserve --> Compile
+    Compile --> Governance["Governance status<br/>Adjudicated evaluation labels produced<br/>Model training not automatically authorized<br/>Production promotion not authorized"]
+    Governance --> Finish(["End"])

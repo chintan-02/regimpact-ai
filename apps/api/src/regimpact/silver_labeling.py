@@ -224,6 +224,22 @@ def prepare_silver_experiment(
         encoding="utf-8",
     )
     (output_dir / "human-evaluation-workspace.html").chmod(0o600)
+    eval_package_b = build_blinded_package(
+        sampled,
+        slot="B",
+        seed=seed,
+        candidate_queue_sha256=str(campaign["candidate_queue_sha256"]),
+        package_id_prefix="v0.6c7-human-evaluation",
+    )
+    _write_json(output_dir / "human-evaluation-package-b.json", eval_package_b)
+    (output_dir / "human-evaluation-workspace-b.html").write_text(
+        build_annotation_workspace(
+            output_dir / "human-evaluation-sample.json",
+            output_dir / "human-evaluation-package-b.json",
+        ),
+        encoding="utf-8",
+    )
+    (output_dir / "human-evaluation-workspace-b.html").chmod(0o600)
 
     manifest = {
         "schema_version": SILVER_SCHEMA_VERSION,
