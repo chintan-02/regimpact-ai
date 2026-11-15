@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
@@ -11,9 +10,11 @@ import httpx
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, func, inspect, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.schema import CreateSchema, DropSchema
 
 from regimpact.auth import CurrentUser, get_current_user
 from regimpact.config import get_settings
@@ -564,73 +565,224 @@ class ExternalIdentityMappingTests(TestCase):
 
 class ExternalIdentityMigrationTests(TestCase):
     def test_migration_upgrades_and_downgrades_external_identity_schema(self) -> None:
-        with TemporaryDirectory() as directory:
-            logger_states = {
-                name: logger.disabled
-                for name, logger in logging.Logger.manager.loggerDict.items()
-                if isinstance(logger, logging.Logger)
-            }
-            database_url = f"sqlite+pysqlite:///{directory}/migration.sqlite"
+        database_url = os.getenv("TEST_DATABASE_URL")
+        if not database_url:
+            self.skipTest(
+                "PostgreSQL migration test requires TEST_DATABASE_URL; "
+                "unit tests continue without it."
+            )
+        parsed_url = make_url(database_url)
+        if parsed_url.get_backend_name() != "postgresql":
+            self.skipTest("PostgreSQL migration test requires a PostgreSQL TEST_DATABASE_URL.")
+
+        schema_name = f"external_identity_migration_{uuid4().hex}"
+        admin_engine = create_engine(database_url)
+        schema_created = False
+        try:
+            with admin_engine.begin() as connection:
+                has_vector = connection.scalar(
+                    text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+                )
+        except SQLAlchemyError as exc:
+            admin_engine.dispose()
+            self.skipTest(
+                "PostgreSQL migration test skipped because TEST_DATABASE_URL is unavailable "
+                f"({type(exc).__name__})."
+            )
+        if not has_vector:
+            admin_engine.dispose()
+            self.skipTest(
+                "PostgreSQL migration test requires the pgvector extension used by "
+                "revision 20260901_0006."
+            )
+        try:
+            with admin_engine.begin() as connection:
+                connection.execute(CreateSchema(schema_name))
+                schema_created = True
+                connection.execute(
+                    text(
+                        f'CREATE TABLE "{schema_name}".alembic_version '
+                        "(version_num VARCHAR(32) NOT NULL)"
+                    )
+                )
+        except SQLAlchemyError as exc:
+            admin_engine.dispose()
+            self.skipTest(
+                "PostgreSQL migration test skipped because TEST_DATABASE_URL is unavailable "
+                f"({type(exc).__name__})."
+            )
+
+        isolated_url = parsed_url.update_query_dict(
+            {"options": f"-csearch_path={schema_name},public"}
+        ).render_as_string(hide_password=False)
+        engine = create_engine(isolated_url)
+        logger_states = {
+            name: logger.disabled
+            for name, logger in logging.Logger.manager.loggerDict.items()
+            if isinstance(logger, logging.Logger)
+        }
+        organization_id = uuid4()
+        admin_id = uuid4()
+        tenant_id = uuid4()
+        external_oid = uuid4()
+        existing_users: list[tuple[object, ...]]
+        try:
             with patch.dict(
                 os.environ,
                 {
                     "REGIMPACT_AUTH_MODE": "legacy_headers",
-                    "REGIMPACT_DATABASE_URL": database_url,
+                    "REGIMPACT_DATABASE_URL": isolated_url,
                 },
             ):
                 get_settings.cache_clear()
-                try:
-                    config = Config("alembic.ini")
-                    command.upgrade(config, "head")
-                    engine = create_engine(database_url)
-                    schema = inspect(engine)
-                    self.assertIn("external_identities", schema.get_table_names())
-                    unique_names = {
-                        constraint["name"]
-                        for constraint in schema.get_unique_constraints("external_identities")
-                    }
-                    self.assertIn(
-                        "uq_external_identity_provider_tenant_oid",
-                        unique_names,
-                    )
-                    self.assertIn(
-                        "uq_external_identity_provider_tenant_user",
-                        unique_names,
-                    )
-                    check_names = {
-                        constraint["name"]
-                        for constraint in schema.get_check_constraints("external_identities")
-                    }
-                    self.assertEqual(
-                        check_names,
+                config = Config("alembic.ini")
+                command.upgrade(config, "20260903_0012")
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            "INSERT INTO organizations (id, name, created_at) "
+                            "VALUES (:id, :name, CURRENT_TIMESTAMP)"
+                        ),
                         {
-                            "ck_external_identity_active_state",
-                            "ck_external_identity_provider",
+                            "id": organization_id,
+                            "name": "Migration test organization",
                         },
                     )
-                    foreign_keys = schema.get_foreign_keys("external_identities")
-                    self.assertTrue(
-                        any(
-                            key["referred_table"] == "users"
-                            and key["constrained_columns"] == ["user_id", "organization_id"]
-                            for key in foreign_keys
+                    connection.execute(
+                        text(
+                            "INSERT INTO users "
+                            "(id, organization_id, email, display_name, role, password_hash, "
+                            "active, created_at) VALUES "
+                            "(:admin_id, :organization_id, :admin_email, :admin_name, "
+                            "'admin', 'not-used', true, CURRENT_TIMESTAMP)"
+                        ),
+                        {
+                            "admin_id": admin_id,
+                            "organization_id": organization_id,
+                            "admin_email": "migration-admin@example.test",
+                            "admin_name": "Migration Admin",
+                        },
+                    )
+                    existing_users = [
+                        tuple(row)
+                        for row in connection.execute(
+                            text(
+                                "SELECT id, organization_id, email, display_name, role, "
+                                "password_hash, active FROM users ORDER BY id"
+                            )
                         )
-                    )
-                    engine.dispose()
+                    ]
 
-                    command.downgrade(config, "20260903_0012")
-                    downgraded_engine = create_engine(database_url)
-                    downgraded_schema = inspect(downgraded_engine)
-                    self.assertNotIn(
-                        "external_identities",
-                        downgraded_schema.get_table_names(),
+                command.upgrade(config, "20261115_0013")
+                schema = inspect(engine)
+                with engine.connect() as connection:
+                    self.assertEqual(
+                        connection.scalar(text("SELECT current_schema()")),
+                        schema_name,
                     )
-                    self.assertNotIn(
-                        "ux_users_id_org",
-                        {index["name"] for index in downgraded_schema.get_indexes("users")},
+                self.assertIn("external_identities", schema.get_table_names())
+                unique_names = {
+                    constraint["name"]
+                    for constraint in schema.get_unique_constraints("external_identities")
+                }
+                self.assertEqual(
+                    unique_names,
+                    {
+                        "uq_external_identity_provider_tenant_oid",
+                        "uq_external_identity_provider_tenant_user",
+                    },
+                )
+                check_names = {
+                    constraint["name"]
+                    for constraint in schema.get_check_constraints("external_identities")
+                }
+                self.assertEqual(
+                    check_names,
+                    {
+                        "ck_external_identity_active_state",
+                        "ck_external_identity_provider",
+                    },
+                )
+                foreign_keys = schema.get_foreign_keys("external_identities")
+                self.assertTrue(
+                    any(
+                        key["name"] == "fk_external_identity_user_org"
+                        and key["referred_table"] == "users"
+                        and key["constrained_columns"] == ["user_id", "organization_id"]
+                        and key["options"].get("ondelete") == "RESTRICT"
+                        for key in foreign_keys
                     )
-                    downgraded_engine.dispose()
-                finally:
-                    get_settings.cache_clear()
-                    for name, disabled in logger_states.items():
-                        logging.getLogger(name).disabled = disabled
+                )
+                self.assertIn(
+                    "ix_external_identity_org_active",
+                    {index["name"] for index in schema.get_indexes("external_identities")},
+                )
+                self.assertIn(
+                    "ux_users_id_org",
+                    {index["name"] for index in schema.get_indexes("users")},
+                )
+
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            "INSERT INTO external_identities "
+                            "(id, provider, tenant_id, external_oid, user_id, organization_id, "
+                            "active, created_by_actor_id, updated_by_actor_id, created_at, "
+                            "updated_at, disabled_at) VALUES "
+                            "(:id, 'entra', :tenant_id, :external_oid, :user_id, "
+                            ":organization_id, true, 'operator:test', 'operator:test', "
+                            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)"
+                        ),
+                        {
+                            "id": uuid4(),
+                            "tenant_id": tenant_id,
+                            "external_oid": external_oid,
+                            "user_id": admin_id,
+                            "organization_id": organization_id,
+                        },
+                    )
+                    upgraded_users = [
+                        tuple(row)
+                        for row in connection.execute(
+                            text(
+                                "SELECT id, organization_id, email, display_name, role, "
+                                "password_hash, active FROM users ORDER BY id"
+                            )
+                        )
+                    ]
+                self.assertEqual(upgraded_users, existing_users)
+
+                command.downgrade(config, "20260903_0012")
+                downgraded_schema = inspect(engine)
+                self.assertNotIn(
+                    "external_identities",
+                    downgraded_schema.get_table_names(),
+                )
+                self.assertNotIn(
+                    "ux_users_id_org",
+                    {index["name"] for index in downgraded_schema.get_indexes("users")},
+                )
+                with engine.connect() as connection:
+                    downgraded_users = [
+                        tuple(row)
+                        for row in connection.execute(
+                            text(
+                                "SELECT id, organization_id, email, display_name, role, "
+                                "password_hash, active FROM users ORDER BY id"
+                            )
+                        )
+                    ]
+                    self.assertEqual(
+                        connection.scalar(text("SELECT version_num FROM alembic_version")),
+                        "20260903_0012",
+                    )
+                self.assertEqual(downgraded_users, existing_users)
+        finally:
+            get_settings.cache_clear()
+            engine.dispose()
+            if schema_created:
+                with admin_engine.begin() as connection:
+                    connection.execute(DropSchema(schema_name, cascade=True, if_exists=True))
+            admin_engine.dispose()
+            for name, disabled in logger_states.items():
+                logging.getLogger(name).disabled = disabled
