@@ -62,7 +62,7 @@ Entra is selected because the verified deployment is already Azure-native and th
 - `common`, `organizations`, `consumers`, personal Microsoft accounts, and unregistered tenant issuers are rejected.
 - B2B guests are allowed only after invitation into the configured directory, assignment to the relevant enterprise applications, and an explicit RegImpact user mapping.
 
-The Entra `tid` identifies the workforce directory; it is not the RegImpact organization. Current `UserRecord` belongs to exactly one `organization_id`, so Phase 1 maps `(tid, oid)` to exactly one active RegImpact user and organization (`apps/api/src/regimpact/db_models.py::UserRecord`). Email, `preferred_username`, and `name` are display data only. Supporting one Entra identity in multiple RegImpact organizations requires a future membership-model decision and is not inferred from a request header.
+The Entra `tid` identifies the workforce directory; it is not the RegImpact organization. Current `UserRecord` belongs to exactly one `organization_id`, so Phase 1 maps `(tid, oid)` to exactly one active RegImpact user and organization (`apps/api/src/regimpact/db_models.py::UserRecord`). During the dual-validator migration only, the validated UUID `oid` must exactly equal an existing active `UserRecord.id`; unknown or malformed values fail closed and never auto-provision. Before general production onboarding, this temporary mechanism must be replaced by an explicit external-identity table keyed by `(entra_tenant_id, entra_oid)` with a unique, auditable association to the local user and organization. Email, `preferred_username`, and `name` are display data only. Supporting one Entra identity in multiple RegImpact organizations requires a future membership-model decision and is not inferred from a request header.
 
 ### Required app registrations and service principals
 
@@ -205,7 +205,7 @@ There is no companion application role for `AdminUser`, workflow approval, user 
 
 - Permit at most 120 seconds of clock skew for `nbf`, `iat`, and `exp`.
 - Reject expired/not-yet-valid tokens, tokens issued implausibly in the future, and tokens whose `exp - iat` exceeds the configured resource maximum plus clock skew.
-- Production resources require a 10-minute access-token lifetime policy for the companion and RegImpact API service principals. Microsoft documents a 10-minute minimum configurable lifetime; without such a policy, Entra access tokens normally vary from 60 to 90 minutes ([configurable token lifetimes](https://learn.microsoft.com/en-us/entra/identity-platform/configurable-token-lifetimes), [access tokens](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens)). If the production tenant cannot enforce the required lifetime, the operator must explicitly revisit this decision before go-live.
+- The validator's default maximum is 90 minutes so normally issued Entra access tokens are accepted. The maximum is explicitly configurable from 10 minutes through 24 hours. An operator may select the 10-minute hardening target only after the corresponding Entra policy is explicitly provisioned and verified; the application does not assume that policy exists. Microsoft documents the 10-minute configurable minimum and normal 60-to-90-minute range ([configurable token lifetimes](https://learn.microsoft.com/en-us/entra/identity-platform/configurable-token-lifetimes), [access tokens](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens)).
 
 ## Identity and correlation propagation
 
@@ -224,7 +224,7 @@ The existing middleware already creates/propagates `traceparent`, `X-Trace-ID`, 
 
 ### Lifetime and caches
 
-- Entra access and ID tokens accepted by these applications have a configured maximum lifetime of 10 minutes, plus validation skew only.
+- Entra access tokens accepted by these applications must satisfy `exp`/`nbf` and the configured `exp - iat` maximum. The validator defaults to 90 minutes; 10 minutes is an explicit post-policy hardening setting, not an assumed platform default.
 - The console's opaque application session has a 30-minute idle and eight-hour absolute maximum, subject to stricter Conditional Access sign-in frequency.
 - Browser cookies contain only an opaque session ID and are HTTP-only, Secure outside local, SameSite, path-bound, and CSRF-protected.
 - Console token caches are encrypted server-side and partitioned by environment, session, `(tid,oid)`, client, resource, and scope set. No user token is cached globally by email.
@@ -235,7 +235,7 @@ The existing middleware already creates/propagates `traceparent`, `X-Trace-ID`, 
 
 - RegImpact rechecks the active local user, organization mapping, and current role on every request, preserving the safety property of current `get_current_user` (`apps/api/src/regimpact/auth.py::get_current_user`; `apps/api/tests/test_auth.py::test_signed_token_resolves_database_identity_and_rejects_tampering`).
 - Removing an enterprise-app assignment, disabling a user/service principal, removing consent/app-role assignment, deleting a federated credential, disabling a local user/service grant, or changing local role denies new tokens or the next local authorization check.
-- Default JWT access tokens are not assumed to be immediately revocable. The 10-minute maximum and current-state lookup bound exposure. Continuous Access Evaluation may be adopted later only after both resource and clients implement claims challenges; it is not relied on for Phase 1 ([CAE](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-continuous-access-evaluation)).
+- Default JWT access tokens are not assumed to be immediately revocable. The configured maximum and current-state lookup bound exposure. Continuous Access Evaluation may be adopted later only after both resource and clients implement claims challenges; it is not relied on for Phase 1 ([CAE](https://learn.microsoft.com/en-us/entra/identity/conditional-access/concept-continuous-access-evaluation)).
 - Server-side caches are purged on logout, local disablement, role/membership change, client disablement, deployment rollback, and security incident.
 
 ### Emergency shutdown
@@ -260,7 +260,7 @@ No resource is created by this ADR. Implementation requires:
 - admin consent and preauthorization limited to the approved console/companion clients;
 - enterprise-app assignment required for users/groups;
 - Conditional Access requiring MFA and approved sign-in/session policy;
-- 10-minute token-lifetime policies for the RegImpact API and companion resources;
+- an explicit token-lifetime policy only if the operator chooses a validator maximum below the normal Entra lifetime range;
 - distinct user-assigned managed identities for console, companion, and FastAPI rather than the current shared workload identity (`infra/main.bicep::identity`, `web`, `api`);
 - federated identity credentials from each workload identity to its confidential app registration, with `api://AzureADTokenExchange` audience;
 - managed-identity app-role assignments for any approved app-only calls;
@@ -318,7 +318,7 @@ During Phase 1, legacy acceptance is restricted by issuer, exact `aud=regimpact-
 
 | Threat | Relevant attack | Required control and test |
 | --- | --- | --- |
-| Token replay | Stolen bearer token replayed from another service/session | Resource-specific audiences, 10-minute lifetime, TLS/private ingress, server-only caches, session partitioning, `uti` hash telemetry, optional sender-constrained tokens later; replay exercise |
+| Token replay | Stolen bearer token replayed from another service/session | Resource-specific audiences, configured bounded lifetime, TLS/private ingress, server-only caches, session partitioning, `uti` hash telemetry, optional sender-constrained tokens later; replay exercise |
 | Confused deputy | Companion uses a valid user token to call a route/client the user did not intend | OBO to a distinct audience, exact requested scope, `azp` allowlist, scope + current RBAC + resource ownership, no `.default` blanket request for delegated operations; negative client/scope tests |
 | Audience confusion | Console/companion/Graph token accepted at FastAPI | Exact v2 client-ID `aud`, tenant issuer, resource-owned validation, separate app registrations; cross-audience matrix tests |
 | Privilege escalation | Viewer obtains analyst/admin effect; service acts as user; companion asks for broader scope | Current DB role recheck, delegated `scp` versus app `roles`, `idtyp`, no service write roles, client preauthorization, deny unknown scope, separation-of-duties tests |
@@ -381,7 +381,7 @@ These are explicit deployment/business inputs, not unresolved architecture mecha
 
 1. The production Entra directory tenant ID and named identity-platform owner.
 2. Which Entra groups receive console/companion enterprise-app assignment and how B2B guests are approved/offboarded.
-3. Whether the tenant has the licensing and policy approval to enforce the selected 10-minute token lifetime and required Conditional Access/MFA; otherwise this ADR must be revisited before production.
+3. Whether the tenant will retain the 90-minute validator maximum or explicitly provision and verify a shorter Entra token-lifetime policy; Conditional Access/MFA approval remains required.
 4. The exact production/staging application client IDs, Application ID URI names, redirect/logout URIs, and verified domains.
 5. The approved initial tenant/user canary and the business owner who may activate or stop companion access.
 6. Whether `Evidence.Read.All` app-only access is needed at all in Phase 1. Default is no app-only companion access.
@@ -406,7 +406,7 @@ Future multitenant SaaS identity, one human in multiple RegImpact organizations,
 - The console authentication model and FastAPI validator must change materially.
 - Three app registrations per environment, consent, token policy, federated credentials, app-role assignments, private networking, audit enrichment, caches, runbooks, and security testing require platform ownership.
 - The one-organization-per-user/service restriction limits initial deployment and may require a future membership model.
-- The 10-minute token lifetime increases token-endpoint traffic and makes resilient, correctly partitioned server caches mandatory.
+- A shorter operator-selected token lifetime increases token-endpoint traffic and makes resilient, correctly partitioned server caches mandatory.
 
 ## Compliance with prior decisions
 

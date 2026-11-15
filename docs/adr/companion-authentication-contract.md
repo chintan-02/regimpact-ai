@@ -197,8 +197,8 @@ Service tokens must carry or resolve:
 ### Lifetime
 
 - Console session: maximum 30-minute idle period and 8-hour absolute period, subject to stricter workforce policy and reauthentication for sensitive actions.
-- Console, companion, and API access tokens: maximum 10 minutes.
-- Service access tokens: maximum 10 minutes; shorter platform defaults are preferred.
+- Console, companion, and API access tokens: `exp` and `nbf` are mandatory and `exp - iat` must not exceed the resource's configured maximum. The RegImpact validator defaults to an Entra-compatible 90 minutes; a 10-minute maximum is enabled only after the operator explicitly provisions and verifies the corresponding identity-platform policy.
+- Service access tokens follow the same configured maximum; shorter explicitly provisioned platform policies are preferred.
 - Exchanged tokens may not outlive the source user session or source token and may only reduce privilege.
 - No long-lived bearer token or refresh token is stored in the browser. Server-side refresh capability, if used, follows the identity provider's rotation and replay-detection controls.
 

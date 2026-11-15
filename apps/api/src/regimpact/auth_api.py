@@ -35,6 +35,8 @@ def _response(user: UserRecord, organization: OrganizationRecord) -> Authenticat
 
 
 def _login(email: str, password: str, session: Session, *, mode: str) -> TokenResponse:
+    if get_settings().auth_mode == "entra":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
     row = session.execute(
         select(UserRecord, OrganizationRecord)
         .join(OrganizationRecord, OrganizationRecord.id == UserRecord.organization_id)
@@ -89,7 +91,14 @@ def demo_login(
 
 @router.get("/me", response_model=AuthenticatedUserResponse)
 def me(user: Authenticated) -> AuthenticatedUserResponse:
-    return AuthenticatedUserResponse(**user.__dict__)
+    return AuthenticatedUserResponse(
+        id=user.id,
+        organization_id=user.organization_id,
+        organization_name=user.organization_name,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+    )
 
 
 @router.get("/users", response_model=list[UserResponse])
