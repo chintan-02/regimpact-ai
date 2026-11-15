@@ -616,6 +616,12 @@ class ExternalIdentityMigrationTests(TestCase):
             {"options": f"-csearch_path={schema_name},public"}
         ).render_as_string(hide_password=False)
         engine = create_engine(isolated_url)
+        alembic_url = isolated_url.replace("%", "%%")
+        config = Config("alembic.ini")
+        config.set_main_option("sqlalchemy.url", alembic_url)
+        self.assertIn("%3D", isolated_url)
+        self.assertIn("%2C", isolated_url)
+        self.assertEqual(config.get_main_option("sqlalchemy.url"), isolated_url)
         logger_states = {
             name: logger.disabled
             for name, logger in logging.Logger.manager.loggerDict.items()
@@ -631,11 +637,10 @@ class ExternalIdentityMigrationTests(TestCase):
                 os.environ,
                 {
                     "REGIMPACT_AUTH_MODE": "legacy_headers",
-                    "REGIMPACT_DATABASE_URL": isolated_url,
+                    "REGIMPACT_DATABASE_URL": alembic_url,
                 },
             ):
                 get_settings.cache_clear()
-                config = Config("alembic.ini")
                 command.upgrade(config, "20260903_0012")
                 with engine.begin() as connection:
                     connection.execute(
