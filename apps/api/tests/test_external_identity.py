@@ -595,6 +595,32 @@ class ExternalIdentityMigrationTests(TestCase):
                 "PostgreSQL migration test requires the pgvector extension used by "
                 "revision 20260901_0006."
             )
+        public_schema_before = inspect(admin_engine)
+        public_tables_before = set(public_schema_before.get_table_names(schema="public"))
+        public_user_indexes_before = (
+            {
+                index["name"]
+                for index in public_schema_before.get_indexes("users", schema="public")
+            }
+            if "users" in public_tables_before
+            else set()
+        )
+        public_external_indexes_before = (
+            {
+                index["name"]
+                for index in public_schema_before.get_indexes(
+                    "external_identities", schema="public"
+                )
+            }
+            if "external_identities" in public_tables_before
+            else set()
+        )
+        with admin_engine.connect() as connection:
+            public_revision_before = (
+                connection.scalar(text("SELECT version_num FROM public.alembic_version"))
+                if "alembic_version" in public_tables_before
+                else None
+            )
         try:
             with admin_engine.begin() as connection:
                 connection.execute(CreateSchema(schema_name))
@@ -679,16 +705,21 @@ class ExternalIdentityMigrationTests(TestCase):
                     ]
 
                 command.upgrade(config, "20261115_0013")
-                schema = inspect(engine)
+                upgraded_schema = inspect(engine)
                 with engine.connect() as connection:
                     self.assertEqual(
                         connection.scalar(text("SELECT current_schema()")),
                         schema_name,
                     )
-                self.assertIn("external_identities", schema.get_table_names())
+                self.assertIn(
+                    "external_identities",
+                    upgraded_schema.get_table_names(schema=schema_name),
+                )
                 unique_names = {
                     constraint["name"]
-                    for constraint in schema.get_unique_constraints("external_identities")
+                    for constraint in upgraded_schema.get_unique_constraints(
+                        "external_identities", schema=schema_name
+                    )
                 }
                 self.assertEqual(
                     unique_names,
@@ -699,7 +730,9 @@ class ExternalIdentityMigrationTests(TestCase):
                 )
                 check_names = {
                     constraint["name"]
-                    for constraint in schema.get_check_constraints("external_identities")
+                    for constraint in upgraded_schema.get_check_constraints(
+                        "external_identities", schema=schema_name
+                    )
                 }
                 self.assertEqual(
                     check_names,
@@ -708,7 +741,9 @@ class ExternalIdentityMigrationTests(TestCase):
                         "ck_external_identity_provider",
                     },
                 )
-                foreign_keys = schema.get_foreign_keys("external_identities")
+                foreign_keys = upgraded_schema.get_foreign_keys(
+                    "external_identities", schema=schema_name
+                )
                 self.assertTrue(
                     any(
                         key["name"] == "fk_external_identity_user_org"
@@ -720,11 +755,21 @@ class ExternalIdentityMigrationTests(TestCase):
                 )
                 self.assertIn(
                     "ix_external_identity_org_active",
-                    {index["name"] for index in schema.get_indexes("external_identities")},
+                    {
+                        index["name"]
+                        for index in upgraded_schema.get_indexes(
+                            "external_identities", schema=schema_name
+                        )
+                    },
                 )
                 self.assertIn(
                     "ux_users_id_org",
-                    {index["name"] for index in schema.get_indexes("users")},
+                    {
+                        index["name"]
+                        for index in upgraded_schema.get_indexes(
+                            "users", schema=schema_name
+                        )
+                    },
                 )
 
                 with engine.begin() as connection:
@@ -761,11 +806,16 @@ class ExternalIdentityMigrationTests(TestCase):
                 downgraded_schema = inspect(engine)
                 self.assertNotIn(
                     "external_identities",
-                    downgraded_schema.get_table_names(),
+                    downgraded_schema.get_table_names(schema=schema_name),
                 )
                 self.assertNotIn(
                     "ux_users_id_org",
-                    {index["name"] for index in downgraded_schema.get_indexes("users")},
+                    {
+                        index["name"]
+                        for index in downgraded_schema.get_indexes(
+                            "users", schema=schema_name
+                        )
+                    },
                 )
                 with engine.connect() as connection:
                     downgraded_users = [
@@ -782,6 +832,41 @@ class ExternalIdentityMigrationTests(TestCase):
                         "20260903_0012",
                     )
                 self.assertEqual(downgraded_users, existing_users)
+
+                public_schema_after = inspect(admin_engine)
+                self.assertEqual(
+                    set(public_schema_after.get_table_names(schema="public")),
+                    public_tables_before,
+                )
+                if "users" in public_tables_before:
+                    self.assertEqual(
+                        {
+                            index["name"]
+                            for index in public_schema_after.get_indexes(
+                                "users", schema="public"
+                            )
+                        },
+                        public_user_indexes_before,
+                    )
+                if "external_identities" in public_tables_before:
+                    self.assertEqual(
+                        {
+                            index["name"]
+                            for index in public_schema_after.get_indexes(
+                                "external_identities", schema="public"
+                            )
+                        },
+                        public_external_indexes_before,
+                    )
+                with admin_engine.connect() as connection:
+                    public_revision_after = (
+                        connection.scalar(
+                            text("SELECT version_num FROM public.alembic_version")
+                        )
+                        if "alembic_version" in public_tables_before
+                        else None
+                    )
+                self.assertEqual(public_revision_after, public_revision_before)
         finally:
             get_settings.cache_clear()
             engine.dispose()
