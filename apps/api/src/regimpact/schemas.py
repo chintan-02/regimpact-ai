@@ -50,6 +50,26 @@ class UserResponse(BaseModel):
     last_login_at: datetime | None
 
 
+class ExternalIdentityCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: UUID
+    external_oid: UUID
+
+
+class ExternalIdentityResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    provider: str
+    tenant_id: UUID
+    external_oid_fingerprint: str
+    user_id: UUID
+    organization_id: UUID
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+    disabled_at: datetime | None
+
+
 class OrganizationCreate(BaseModel):
     id: UUID
     name: str = Field(min_length=2, max_length=200)

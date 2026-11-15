@@ -101,6 +101,53 @@ without a time-bounded reason.
 
 ## Operational validation and rollback
 
+### Entra-only cutover gate
+
+Enabling `REGIMPACT_AUTH_MODE=entra` is prohibited until migration `20261115_0013` has completed
+successfully and the external-identity cutover preflight passes against the target database. Run
+the command from the deployed API/migration image while the target environment still uses `dual`
+mode and receives its approved production configuration through the normal secret and configuration
+mechanism:
+
+```bash
+python -m regimpact.external_identity_cli preflight \
+  --acknowledge-legacy-rollback \
+  'I ACKNOWLEDGE LEGACY ROLLBACK REQUIRES RESTORING LEGACY MODE AND ITS SECRET'
+```
+
+The preflight is read-only and network-free. Success exits zero and reports only safe counts in this
+form:
+
+```text
+Cutover preflight passed: revision=20261115_0013 active_mappings=<COUNT> active_admin_mappings=<COUNT>
+```
+
+Any failure exits nonzero and reports a safe category such as:
+
+```text
+External identity operation failed: <SAFE_FAILURE_CATEGORY>
+```
+
+Stop the deployment and do not enable Entra-only mode if configuration is incomplete, revision
+`20261115_0013` is missing, no active mapping resolves to an active local administrator, any active
+mapping belongs to a different Entra tenant, or mapping conflicts or ambiguity are detected. Attach
+the successful preflight outcome to the protected deployment evidence before changing the mode.
+
+For a controlled cutover rollback, restore `REGIMPACT_AUTH_MODE=dual` (or the approved emergency
+`legacy` mode) together with the retained legacy signing secret, deploy the last compatible image,
+and keep the external mappings and audit records intact. If the initial offline bootstrap mapping
+itself must be disabled, first restore `dual` or `legacy`, then run the bootstrap-only rollback:
+
+```bash
+python -m regimpact.external_identity_cli rollback-bootstrap \
+  --mapping-id '<BOOTSTRAP_MAPPING_UUID>' \
+  --acknowledge 'I ACKNOWLEDGE THIS DISABLES THE BOOTSTRAP ENTRA ADMIN MAPPING'
+```
+
+The rollback command cannot run in `entra` mode and cannot alter mappings created through the admin
+API. See [Authentication and role-based access control](authentication-and-rbac.md#cutover-preflight-and-rollback)
+for configuration placeholders, bootstrap constraints, safe output, and recovery details.
+
 After a staging deployment, run `scripts/validate-azure-staging.sh`. It verifies the provisioning
 state of the API, web, and worker Container Apps plus the migration, dispatcher, and scheduler jobs;
 it exercises the public readiness proxy, confirms the deployed API version, and proves demo access

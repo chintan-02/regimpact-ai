@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_session
-from .db_models import OrganizationRecord, UserRecord
+from .db_models import ExternalIdentityRecord, OrganizationRecord, UserRecord
 from .observability import actor_id_context, organization_id_context
 from .token_validation import (
     TokenValidationError,
@@ -48,11 +48,13 @@ class CurrentUser:
     email: str
     display_name: str
     role: str
+    principal_type: str = "user"
     token_family: str = "legacy"
     tenant_id: str | None = None
     subject_id: str | None = None
     object_id: str | None = None
     client_id: str | None = None
+    external_identity_mapping_id: UUID | None = None
     delegated_scopes: frozenset[str] = frozenset()
     application_roles: frozenset[str] = frozenset()
 
@@ -146,6 +148,21 @@ def _unauthorized(message: str = "Authentication is required.") -> HTTPException
     )
 
 
+def _external_identity_rejected(
+    category: str,
+    mapping_id: UUID | None = None,
+) -> HTTPException:
+    extra: dict[str, object] = {
+        "event": "authentication_failed",
+        "auth_failure_category": category,
+        "token_family": "entra",
+    }
+    if mapping_id is not None:
+        extra["external_identity_mapping_id"] = str(mapping_id)
+    logger.warning("external identity rejected", extra=extra)
+    return _unauthorized("The access token is invalid or expired.")
+
+
 def get_current_user(
     # Authentication performs its own database read. Do not reuse the endpoint's
     # unit-of-work session because that read starts an implicit transaction and
@@ -173,18 +190,52 @@ def get_current_user(
         token = _decode_access_token(authorization.removeprefix("Bearer ").strip())
     except (TypeError, ValueError) as exc:
         raise _unauthorized("The access token is invalid or expired.") from exc
-    identity_query = (
-        select(UserRecord, OrganizationRecord)
-        .join(OrganizationRecord, OrganizationRecord.id == UserRecord.organization_id)
-        .where(UserRecord.id == token.user_id, UserRecord.active.is_(True))
-    )
-    if token.organization_id is not None:
-        identity_query = identity_query.where(
-            UserRecord.organization_id == token.organization_id
+    mapping_id: UUID | None = None
+    if token.family == "entra":
+        if token.tenant_id is None or token.external_oid is None:
+            raise _external_identity_rejected("external_identity_claims_invalid")
+        mappings = list(
+            session.scalars(
+                select(ExternalIdentityRecord).where(
+                    ExternalIdentityRecord.provider == "entra",
+                    ExternalIdentityRecord.tenant_id == UUID(token.tenant_id),
+                    ExternalIdentityRecord.external_oid == token.external_oid,
+                )
+            )
         )
-    row = session.execute(identity_query).one_or_none()
-    if row is None:
-        raise _unauthorized("The authenticated user is inactive or unavailable.")
+        if not mappings:
+            raise _external_identity_rejected("external_identity_unknown")
+        if len(mappings) != 1:
+            raise _external_identity_rejected("external_identity_ambiguous")
+        mapping = mappings[0]
+        mapping_id = mapping.id
+        if not mapping.active or mapping.disabled_at is not None:
+            raise _external_identity_rejected("external_identity_disabled", mapping.id)
+        row = session.execute(
+            select(UserRecord, OrganizationRecord)
+            .join(OrganizationRecord, OrganizationRecord.id == UserRecord.organization_id)
+            .where(
+                UserRecord.id == mapping.user_id,
+                UserRecord.organization_id == mapping.organization_id,
+                UserRecord.active.is_(True),
+            )
+        ).one_or_none()
+        if row is None:
+            raise _external_identity_rejected("external_identity_user_unavailable", mapping.id)
+    else:
+        if token.user_id is None or token.organization_id is None:
+            raise _unauthorized("The access token is invalid or expired.")
+        row = session.execute(
+            select(UserRecord, OrganizationRecord)
+            .join(OrganizationRecord, OrganizationRecord.id == UserRecord.organization_id)
+            .where(
+                UserRecord.id == token.user_id,
+                UserRecord.organization_id == token.organization_id,
+                UserRecord.active.is_(True),
+            )
+        ).one_or_none()
+        if row is None:
+            raise _unauthorized("The authenticated user is inactive or unavailable.")
     user, organization = row
     if user.role not in VALID_ROLES or (
         token.claimed_role is not None and token.claimed_role != user.role
@@ -202,6 +253,7 @@ def get_current_user(
         subject_id=token.subject_id,
         object_id=token.object_id,
         client_id=token.client_id,
+        external_identity_mapping_id=mapping_id,
         delegated_scopes=token.delegated_scopes,
         application_roles=token.application_roles,
     )

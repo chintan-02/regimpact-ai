@@ -7,9 +7,11 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -37,6 +39,7 @@ class UserRecord(Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("organization_id", "email", name="uq_user_org_email"),
+        Index("ux_users_id_org", "id", "organization_id", unique=True),
         Index("ix_users_org_role", "organization_id", "role"),
     )
 
@@ -51,6 +54,60 @@ class UserRecord(Base):
     active: Mapped[bool] = mapped_column(nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExternalIdentityRecord(Base):
+    __tablename__ = "external_identities"
+    __table_args__ = (
+        CheckConstraint(
+            "provider = lower(provider) AND provider = 'entra'",
+            name="ck_external_identity_provider",
+        ),
+        CheckConstraint(
+            "(active AND disabled_at IS NULL) OR "
+            "(NOT active AND disabled_at IS NOT NULL)",
+            name="ck_external_identity_active_state",
+        ),
+        UniqueConstraint(
+            "provider",
+            "tenant_id",
+            "external_oid",
+            name="uq_external_identity_provider_tenant_oid",
+        ),
+        UniqueConstraint(
+            "provider",
+            "tenant_id",
+            "user_id",
+            name="uq_external_identity_provider_tenant_user",
+        ),
+        ForeignKeyConstraint(
+            ["user_id", "organization_id"],
+            ["users.id", "users.organization_id"],
+            name="fk_external_identity_user_org",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "ix_external_identity_org_active",
+            "organization_id",
+            "active",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(SAUuid, primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(30), nullable=False, default="entra")
+    tenant_id: Mapped[UUID] = mapped_column(SAUuid, nullable=False)
+    external_oid: Mapped[UUID] = mapped_column(SAUuid, nullable=False)
+    user_id: Mapped[UUID] = mapped_column(SAUuid, nullable=False)
+    organization_id: Mapped[UUID] = mapped_column(SAUuid, nullable=False)
+    active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    created_by_actor_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    updated_by_actor_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class RegulationRecord(Base):
