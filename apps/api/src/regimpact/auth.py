@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import base64
-import binascii
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 import time
 from collections.abc import Callable
@@ -22,11 +22,22 @@ from .config import get_settings
 from .database import get_session
 from .db_models import OrganizationRecord, UserRecord
 from .observability import actor_id_context, organization_id_context
+from .token_validation import (
+    TokenValidationError,
+    ValidatedAccessToken,
+    get_jwks_provider,
+    validate_access_token,
+)
 
 VALID_ROLES = frozenset({"admin", "analyst", "viewer"})
 SCRYPT_N = 2**14
 SCRYPT_R = 8
 SCRYPT_P = 1
+logger = logging.getLogger("regimpact.auth")
+
+
+class LegacyTokenIssuanceDisabledError(RuntimeError):
+    """Raised when an Entra-only deployment attempts to mint a legacy token."""
 
 
 @dataclass(frozen=True)
@@ -37,6 +48,13 @@ class CurrentUser:
     email: str
     display_name: str
     role: str
+    token_family: str = "legacy"
+    tenant_id: str | None = None
+    subject_id: str | None = None
+    object_id: str | None = None
+    client_id: str | None = None
+    delegated_scopes: frozenset[str] = frozenset()
+    application_roles: frozenset[str] = frozenset()
 
     @property
     def actor_id(self) -> str:
@@ -73,12 +91,12 @@ def _b64encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode()
 
 
-def _b64decode(value: str) -> bytes:
-    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-
-
 def issue_access_token(user: UserRecord) -> tuple[str, int]:
     settings = get_settings()
+    if settings.auth_mode == "entra":
+        raise LegacyTokenIssuanceDisabledError(
+            "Legacy token issuance is disabled in Entra-only mode."
+        )
     seconds = settings.access_token_minutes * 60
     now = int(time.time())
     payload = {
@@ -101,26 +119,22 @@ def issue_access_token(user: UserRecord) -> tuple[str, int]:
     return f"{unsigned}.{_b64encode(signature)}", seconds
 
 
-def _decode_access_token(token: str) -> dict[str, object]:
+def _decode_access_token(token: str) -> ValidatedAccessToken:
     settings = get_settings()
     try:
-        header_part, payload_part, signature_part = token.split(".")
-        unsigned = f"{header_part}.{payload_part}"
-        expected = hmac.new(
-            settings.jwt_secret.encode(), unsigned.encode(), hashlib.sha256
-        ).digest()
-        if not hmac.compare_digest(expected, _b64decode(signature_part)):
-            raise ValueError("invalid signature")
-        header = json.loads(_b64decode(header_part))
-        payload = json.loads(_b64decode(payload_part))
-        if header != {"alg": "HS256", "typ": "JWT"}:
-            raise ValueError("invalid header")
-        if payload.get("iss") != "regimpact-api" or payload.get("aud") != "regimpact-web":
-            raise ValueError("invalid token scope")
-        if int(payload["exp"]) <= int(time.time()):
-            raise ValueError("expired token")
-        return payload
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError, binascii.Error) as exc:
+        provider = (
+            get_jwks_provider(settings) if settings.auth_mode in {"dual", "entra"} else None
+        )
+        return validate_access_token(token, settings, provider)
+    except TokenValidationError as exc:
+        logger.warning(
+            "access token rejected",
+            extra={
+                "event": "authentication_failed",
+                "auth_failure_category": exc.category,
+                "token_family": exc.family or "unclassified",
+            },
+        )
         raise _unauthorized("The access token is invalid or expired.") from exc
 
 
@@ -156,24 +170,25 @@ def get_current_user(
     if not authorization or not authorization.startswith("Bearer "):
         raise _unauthorized()
     try:
-        claims = _decode_access_token(authorization.removeprefix("Bearer ").strip())
-        user_id = UUID(str(claims["sub"]))
-        organization_id = UUID(str(claims["org"]))
-    except (KeyError, TypeError, ValueError) as exc:
+        token = _decode_access_token(authorization.removeprefix("Bearer ").strip())
+    except (TypeError, ValueError) as exc:
         raise _unauthorized("The access token is invalid or expired.") from exc
-    row = session.execute(
+    identity_query = (
         select(UserRecord, OrganizationRecord)
         .join(OrganizationRecord, OrganizationRecord.id == UserRecord.organization_id)
-        .where(
-            UserRecord.id == user_id,
-            UserRecord.organization_id == organization_id,
-            UserRecord.active.is_(True),
+        .where(UserRecord.id == token.user_id, UserRecord.active.is_(True))
+    )
+    if token.organization_id is not None:
+        identity_query = identity_query.where(
+            UserRecord.organization_id == token.organization_id
         )
-    ).one_or_none()
+    row = session.execute(identity_query).one_or_none()
     if row is None:
         raise _unauthorized("The authenticated user is inactive or unavailable.")
     user, organization = row
-    if claims.get("role") != user.role or user.role not in VALID_ROLES:
+    if user.role not in VALID_ROLES or (
+        token.claimed_role is not None and token.claimed_role != user.role
+    ):
         raise _unauthorized("The access token no longer matches the user's permissions.")
     current = CurrentUser(
         id=user.id,
@@ -182,6 +197,13 @@ def get_current_user(
         email=user.email,
         display_name=user.display_name,
         role=user.role,
+        token_family=token.family,
+        tenant_id=token.tenant_id,
+        subject_id=token.subject_id,
+        object_id=token.object_id,
+        client_id=token.client_id,
+        delegated_scopes=token.delegated_scopes,
+        application_roles=token.application_roles,
     )
     actor_id_context.set(current.actor_id)
     organization_id_context.set(str(current.organization_id))

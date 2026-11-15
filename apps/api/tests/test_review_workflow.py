@@ -189,7 +189,7 @@ class ReviewWorkflowTests(TestCase):
             f"/api/v1/obligations/{self.obligation_id}/mapping-decisions"
             f"?mapping_id={self.mapping_id}"
         )
-        with patch.dict(os.environ, {"REGIMPACT_AUTH_MODE": "jwt"}):
+        with patch.dict(os.environ, {"REGIMPACT_AUTH_MODE": "legacy"}):
             get_settings.cache_clear()
             try:
                 token, _ = issue_access_token(user)

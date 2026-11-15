@@ -41,7 +41,15 @@ class JsonFormatter(logging.Formatter):
         for key, value in context_fields.items():
             if value:
                 payload[key] = value
-        for key in ("method", "route", "status_code", "duration_ms", "event"):
+        for key in (
+            "method",
+            "route",
+            "status_code",
+            "duration_ms",
+            "event",
+            "auth_failure_category",
+            "token_family",
+        ):
             extra_value = getattr(record, key, None)
             if extra_value is not None:
                 payload[key] = extra_value

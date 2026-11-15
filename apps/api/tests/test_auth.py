@@ -1,6 +1,7 @@
 import asyncio
 import os
 import secrets
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 from uuid import uuid4
@@ -11,7 +12,13 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from regimpact.auth import CurrentUser, get_current_user, hash_password, issue_access_token
+from regimpact.auth import (
+    CurrentUser,
+    LegacyTokenIssuanceDisabledError,
+    get_current_user,
+    hash_password,
+    issue_access_token,
+)
 from regimpact.config import get_settings
 from regimpact.database import Base, get_session
 from regimpact.db_models import AuditEventRecord, OrganizationRecord, UserRecord
@@ -93,6 +100,25 @@ class AuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(self.session.scalar(select(func.count()).select_from(AuditEventRecord)), 0)
 
+    def test_credential_login_is_disabled_in_entra_only_mode(self) -> None:
+        with patch("regimpact.auth_api.get_settings", return_value=SimpleNamespace(auth_mode="entra")):
+            response = asyncio.run(
+                self.request(
+                    "POST",
+                    "/api/v1/auth/login",
+                    json={"email": "analyst@example.test", "password": self.password},
+                )
+            )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.session.scalar(select(func.count()).select_from(AuditEventRecord)), 0)
+
+    def test_direct_legacy_token_issuance_is_disabled_in_entra_only_mode(self) -> None:
+        with (
+            patch("regimpact.auth.get_settings", return_value=SimpleNamespace(auth_mode="entra")),
+            self.assertRaises(LegacyTokenIssuanceDisabledError),
+        ):
+            issue_access_token(self.user)
+
     def test_demo_login_is_hidden_by_default(self) -> None:
         response = asyncio.run(
             self.request("POST", "/api/v1/auth/demo-login", json={"role": "analyst"})
@@ -173,7 +199,7 @@ class AuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_signed_token_resolves_database_identity_and_rejects_tampering(self) -> None:
-        with patch.dict(os.environ, {"REGIMPACT_AUTH_MODE": "jwt"}):
+        with patch.dict(os.environ, {"REGIMPACT_AUTH_MODE": "legacy"}):
             get_settings.cache_clear()
             try:
                 token, _ = issue_access_token(self.user)
@@ -181,9 +207,19 @@ class AuthenticationTests(TestCase):
                 self.assertEqual(current.id, self.user_id)
                 self.assertEqual(current.organization_id, self.organization_id)
                 self.assertEqual(current.role, "analyst")
-                with self.assertRaises(HTTPException) as caught:
+                with (
+                    self.assertLogs("regimpact.auth", level="WARNING") as logs,
+                    self.assertRaises(HTTPException) as caught,
+                ):
                     get_current_user(self.session, f"Bearer {token}tampered", None, None)
                 self.assertEqual(caught.exception.status_code, 401)
+                self.assertEqual(
+                    caught.exception.detail,
+                    "The access token is invalid or expired.",
+                )
+                self.assertEqual(logs.records[0].event, "authentication_failed")
+                self.assertEqual(logs.records[0].token_family, "legacy")
+                self.assertNotIn(token, logs.output[0])
             finally:
                 get_settings.cache_clear()
 
