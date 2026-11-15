@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 from regimpact.auth import CurrentUser, get_current_user, require_roles
 from regimpact.config import Settings
 from regimpact.database import Base
-from regimpact.db_models import OrganizationRecord, UserRecord
+from regimpact.db_models import ExternalIdentityRecord, OrganizationRecord, UserRecord
 from regimpact.token_validation import (
     HttpJwksProvider,
     JwksError,
@@ -480,6 +480,7 @@ class EntraPrincipalMappingTests(TestCase):
         self.session = Session(self.engine, expire_on_commit=False)
         self.organization_id = uuid4()
         self.user_id = uuid4()
+        self.external_oid = uuid4()
         with self.session.begin():
             self.session.add(
                 OrganizationRecord(id=self.organization_id, name="Mapped tenant")
@@ -492,6 +493,18 @@ class EntraPrincipalMappingTests(TestCase):
                     display_name="Mapped Viewer",
                     role="viewer",
                     password_hash="not-used-for-entra-validation",
+                )
+            )
+            self.session.add(
+                ExternalIdentityRecord(
+                    provider="entra",
+                    tenant_id=UUID(TENANT_ID),
+                    external_oid=self.external_oid,
+                    user_id=self.user_id,
+                    organization_id=self.organization_id,
+                    active=True,
+                    created_by_actor_id="user:test-admin",
+                    updated_by_actor_id="user:test-admin",
                 )
             )
         self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -541,7 +554,7 @@ class EntraPrincipalMappingTests(TestCase):
             return get_current_user(self.session, f"Bearer {token}", None, None)
 
     def test_entra_claims_map_to_existing_user_without_granting_token_roles(self) -> None:
-        current = self.authenticate(self.token(str(self.user_id)))
+        current = self.authenticate(self.token(str(self.external_oid)))
         self.assertEqual(current.id, self.user_id)
         self.assertEqual(current.organization_id, self.organization_id)
         self.assertEqual(current.role, "viewer")
@@ -566,6 +579,35 @@ class EntraPrincipalMappingTests(TestCase):
         )
         self.assertIsNone(self.session.get(UserRecord, unknown_oid))
 
+    def test_direct_oid_to_user_id_fallback_is_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as caught:
+            self.authenticate(self.token(str(self.user_id)))
+        self.assertEqual(caught.exception.status_code, 401)
+
+    def test_disabled_mapping_and_inactive_local_user_are_rejected(self) -> None:
+        mapping = self.session.scalar(
+            select(ExternalIdentityRecord).where(
+                ExternalIdentityRecord.external_oid == self.external_oid
+            )
+        )
+        assert mapping is not None
+        mapping.active = False
+        mapping.disabled_at = mapping.updated_at
+        self.session.commit()
+        with self.assertRaises(HTTPException) as disabled:
+            self.authenticate(self.token(str(self.external_oid)))
+        self.assertEqual(disabled.exception.status_code, 401)
+
+        mapping.active = True
+        mapping.disabled_at = None
+        user = self.session.get(UserRecord, self.user_id)
+        assert user is not None
+        user.active = False
+        self.session.commit()
+        with self.assertRaises(HTTPException) as inactive:
+            self.authenticate(self.token(str(self.external_oid)))
+        self.assertEqual(inactive.exception.status_code, 401)
+
     def test_entra_mode_rejects_legacy_header_identity(self) -> None:
         with (
             patch("regimpact.auth.get_settings", return_value=self.settings),
@@ -582,7 +624,7 @@ class EntraPrincipalMappingTests(TestCase):
     def test_failed_entra_token_log_excludes_token_and_identity_claims(self) -> None:
         attacker_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         subject = "sensitive-pairwise-subject"
-        token = self.token(str(self.user_id), private_key=attacker_key, subject=subject)
+        token = self.token(str(self.external_oid), private_key=attacker_key, subject=subject)
         with (
             self.assertLogs("regimpact.auth", level="WARNING") as logs,
             self.assertRaises(HTTPException),

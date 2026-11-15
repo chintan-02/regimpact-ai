@@ -376,7 +376,7 @@ Companion integration is denied until all applicable criteria pass in CI and sta
 ### Costs and tradeoffs
 
 - The console's current simple token forwarding must change before companion integration.
-- RegImpact needs an external identity/token-exchange integration, client/service grant model, route scopes, richer audit context, rate limits, and additional tests.
+- RegImpact now has explicit tenant-bound external user identity mapping; it still needs token exchange, a client/service grant model, route scopes, richer companion audit context, rate limits, and additional integration tests.
 - Separate clients, keys, identities, and private network paths add platform and operational ownership.
 - Auditing all companion reads increases event volume and requires an explicit retention/export design.
 

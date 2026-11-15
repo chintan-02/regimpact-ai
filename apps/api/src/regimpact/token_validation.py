@@ -52,7 +52,8 @@ class SigningKeyProvider(Protocol):
 @dataclass(frozen=True)
 class ValidatedAccessToken:
     family: TokenFamily
-    user_id: UUID
+    user_id: UUID | None
+    external_oid: UUID | None
     organization_id: UUID | None
     claimed_role: str | None
     tenant_id: str | None
@@ -171,6 +172,7 @@ def _validate_legacy(token: str, settings: Settings) -> ValidatedAccessToken:
     return ValidatedAccessToken(
         family="legacy",
         user_id=user_id,
+        external_oid=None,
         organization_id=organization_id,
         claimed_role=role,
         tenant_id=None,
@@ -294,7 +296,8 @@ def _validate_entra(
 
     return ValidatedAccessToken(
         family="entra",
-        user_id=user_id,
+        user_id=None,
+        external_oid=user_id,
         organization_id=None,
         claimed_role=None,
         tenant_id=settings.entra_tenant_id,

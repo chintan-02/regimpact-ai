@@ -49,6 +49,7 @@ class JsonFormatter(logging.Formatter):
             "event",
             "auth_failure_category",
             "token_family",
+            "external_identity_mapping_id",
         ):
             extra_value = getattr(record, key, None)
             if extra_value is not None:
