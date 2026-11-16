@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
 from regimpact.auth import (
     CurrentUser,
@@ -23,6 +24,10 @@ from regimpact.config import get_settings
 from regimpact.database import Base, get_session
 from regimpact.db_models import AuditEventRecord, OrganizationRecord, UserRecord
 from regimpact.main import create_app
+
+
+def _request() -> Request:
+    return Request({"type": "http", "method": "GET", "path": "/api/v1/auth/me", "headers": []})
 
 
 class AuthenticationTests(TestCase):
@@ -203,7 +208,9 @@ class AuthenticationTests(TestCase):
             get_settings.cache_clear()
             try:
                 token, _ = issue_access_token(self.user)
-                current = get_current_user(self.session, f"Bearer {token}", None, None)
+                current = get_current_user(
+                    self.session, _request(), f"Bearer {token}", None, None
+                )
                 self.assertEqual(current.id, self.user_id)
                 self.assertEqual(current.organization_id, self.organization_id)
                 self.assertEqual(current.role, "analyst")
@@ -211,7 +218,9 @@ class AuthenticationTests(TestCase):
                     self.assertLogs("regimpact.auth", level="WARNING") as logs,
                     self.assertRaises(HTTPException) as caught,
                 ):
-                    get_current_user(self.session, f"Bearer {token}tampered", None, None)
+                    get_current_user(
+                        self.session, _request(), f"Bearer {token}tampered", None, None
+                    )
                 self.assertEqual(caught.exception.status_code, 401)
                 self.assertEqual(
                     caught.exception.detail,

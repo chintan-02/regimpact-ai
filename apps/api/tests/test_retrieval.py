@@ -3,12 +3,12 @@ from unittest import TestCase
 from uuid import UUID, uuid4
 
 import httpx
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from regimpact.database import Base, get_session
-from regimpact.db_models import RegulationRecord
+from regimpact.db_models import RegulationRecord, SectionSearchRecord
 from regimpact.domain import Section
 from regimpact.embeddings import (
     EMBEDDING_DIMENSIONS,
@@ -21,7 +21,12 @@ from regimpact.repository import (
     SqlAlchemyVersionRepository,
     ensure_organization,
 )
-from regimpact.retrieval import hybrid_search, index_version
+from regimpact.retrieval import (
+    SearchUnavailableError,
+    ensure_search_ready,
+    hybrid_search,
+    index_version,
+)
 from regimpact.versioning import VersioningService
 
 
@@ -132,6 +137,25 @@ class HybridRetrievalTests(TestCase):
             [],
         )
 
+    def test_search_readiness_rejects_inconsistent_projection(self):
+        with self.session.begin():
+            index_version(
+                self.session,
+                organization_id=self.organization_id,
+                version_id=self.version_id,
+                provider=self.provider,
+            )
+        record = self.session.scalar(select(SectionSearchRecord))
+        assert record is not None
+        record.content_hash = "0" * 64
+        self.session.flush()
+        with self.assertRaises(SearchUnavailableError):
+            ensure_search_ready(
+                self.session,
+                organization_id=self.organization_id,
+                provider=self.provider,
+            )
+
     def test_api_contract_indexes_and_searches(self):
         app = create_app()
 
@@ -156,3 +180,62 @@ class HybridRetrievalTests(TestCase):
         self.assertEqual(indexed.status_code, 200)
         self.assertEqual(searched.status_code, 200)
         self.assertEqual(searched.json()["results"][0]["section_key"], "4.2")
+        self.assertEqual(len(searched.json()["results"][0]["version_content_hash"]), 64)
+        self.assertEqual(len(searched.json()["results"][0]["section_content_hash"]), 64)
+
+    def test_search_readiness_and_canonical_evidence_fail_closed(self):
+        app = create_app()
+
+        def override():
+            yield self.session
+
+        app.dependency_overrides[get_session] = override
+
+        async def run():
+            transport = httpx.ASGITransport(app=app)
+            headers = {"X-Organization-ID": str(self.organization_id)}
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                unavailable = await client.get(
+                    "/api/v1/search", params={"q": "incident report"}, headers=headers
+                )
+                self.session.rollback()
+                await client.post(
+                    f"/api/v1/versions/{self.version_id}/search-index", headers=headers
+                )
+                searched = await client.get(
+                    "/api/v1/search", params={"q": "incident report"}, headers=headers
+                )
+                hit = searched.json()["results"][0]
+                params = {
+                    "version_id": hit["version_id"],
+                    "version_content_hash": hit["version_content_hash"],
+                    "section_hash": hit["section_content_hash"],
+                }
+                evidence = await client.get(
+                    f"/api/v1/evidence/{hit['section_id']}", params=params, headers=headers
+                )
+                stale = await client.get(
+                    f"/api/v1/evidence/{hit['section_id']}",
+                    params={**params, "section_hash": "0" * 64},
+                    headers=headers,
+                )
+                wrong_version = await client.get(
+                    f"/api/v1/evidence/{hit['section_id']}",
+                    params={**params, "version_id": str(uuid4())},
+                    headers=headers,
+                )
+                foreign = await client.get(
+                    f"/api/v1/evidence/{hit['section_id']}",
+                    params=params,
+                    headers={"X-Organization-ID": str(uuid4())},
+                )
+                return unavailable, evidence, stale, wrong_version, foreign
+
+        unavailable, evidence, stale, wrong_version, foreign = asyncio.run(run())
+        self.assertEqual(unavailable.status_code, 503)
+        self.assertEqual(unavailable.json()["error"]["code"], "search_unavailable")
+        self.assertEqual(evidence.status_code, 200)
+        self.assertEqual(evidence.json()["version_id"], str(self.version_id))
+        self.assertEqual(stale.status_code, 404)
+        self.assertEqual(wrong_version.status_code, 404)
+        self.assertEqual(foreign.status_code, 404)

@@ -18,6 +18,14 @@ from .repository import RegulationNotFoundError
 _TOKEN = re.compile(r"[a-z0-9]+")
 
 
+class SearchUnavailableError(RuntimeError):
+    """Raised when the tenant's configured search projection is not complete."""
+
+
+def section_content_hash(heading: str, body: str) -> str:
+    return sha256(f"{heading}\n{body}".encode()).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class RetrievalHit:
     section_id: UUID
@@ -29,6 +37,8 @@ class RetrievalHit:
     page: int | None
     source_uri: str
     version_ordinal: int
+    version_content_hash: str
+    section_content_hash: str
     score: float
     lexical_score: float
     vector_score: float
@@ -70,13 +80,49 @@ def index_version(
                 version_id=version.id,
                 section_id=section.id,
                 embedding_model_id=provider.model_id,
-                content_hash=sha256(searchable.encode()).hexdigest(),
+                content_hash=section_content_hash(section.heading, section.body),
                 searchable_text=searchable,
                 embedding=list(vector),
             )
         )
     session.flush()
     return len(pending), len(existing)
+
+
+def ensure_search_ready(
+    session: Session,
+    *,
+    organization_id: UUID,
+    provider: EmbeddingProvider,
+) -> None:
+    sections = session.execute(
+        select(SectionRecord, RegulationVersionRecord, RegulationRecord)
+        .join(RegulationVersionRecord, RegulationVersionRecord.id == SectionRecord.version_id)
+        .join(RegulationRecord, RegulationRecord.id == RegulationVersionRecord.regulation_id)
+        .where(RegulationRecord.organization_id == organization_id)
+    ).all()
+    if not sections:
+        raise SearchUnavailableError("search_index_unavailable")
+    indexed = {
+        record.section_id: record
+        for record in session.scalars(
+            select(SectionSearchRecord).where(
+                SectionSearchRecord.organization_id == organization_id,
+                SectionSearchRecord.embedding_model_id == provider.model_id,
+            )
+        )
+    }
+    if len(indexed) != len(sections):
+        raise SearchUnavailableError("search_index_incomplete")
+    for section, version, regulation in sections:
+        record = indexed.get(section.id)
+        if (
+            record is None
+            or record.version_id != version.id
+            or record.regulation_id != regulation.id
+            or record.content_hash != section_content_hash(section.heading, section.body)
+        ):
+            raise SearchUnavailableError("search_index_inconsistent")
 
 
 def _cosine(left: tuple[float, ...], right: list[float]) -> float:
@@ -170,6 +216,8 @@ def hybrid_search(
                 page=section.page,
                 source_uri=version.source_uri,
                 version_ordinal=version.ordinal,
+                version_content_hash=version.content_hash,
+                section_content_hash=s.content_hash,
                 score=scores[s.id][0],
                 lexical_score=scores[s.id][1],
                 vector_score=scores[s.id][2],

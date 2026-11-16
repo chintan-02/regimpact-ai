@@ -105,3 +105,17 @@ class ReadApiTests(TestCase):
         self.assertEqual(regulations.json(), [])
         self.assertEqual(changes.json(), [])
         self.assertEqual(detail.status_code, 404)
+
+    def test_collection_pagination_is_bounded_and_deterministic(self):
+        first = asyncio.run(self.request("/api/v1/regulations?limit=1&offset=0"))
+        empty = asyncio.run(self.request("/api/v1/regulations?limit=1&offset=1"))
+        excessive = asyncio.run(self.request("/api/v1/regulations?limit=201"))
+        negative = asyncio.run(self.request("/api/v1/changes?offset=-1"))
+        versions = asyncio.run(
+            self.request(f"/api/v1/regulations/{self.regulation_id}/versions?limit=1")
+        )
+        self.assertEqual(len(first.json()), 1)
+        self.assertEqual(empty.json(), [])
+        self.assertEqual(excessive.status_code, 422)
+        self.assertEqual(negative.status_code, 422)
+        self.assertEqual(versions.json()[0]["ordinal"], 2)

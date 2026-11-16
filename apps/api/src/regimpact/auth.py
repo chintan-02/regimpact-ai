@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -168,6 +168,7 @@ def get_current_user(
     # unit-of-work session because that read starts an implicit transaction and
     # prevents authenticated write handlers from opening their transaction.
     session: Annotated[Session, Depends(get_session, use_cache=False)],
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
     x_organization_id: Annotated[UUID | None, Header()] = None,
     x_actor_id: Annotated[str | None, Header()] = None,
@@ -259,6 +260,9 @@ def get_current_user(
     )
     actor_id_context.set(current.actor_id)
     organization_id_context.set(str(current.organization_id))
+    from .companion_access import enforce_companion_access
+
+    enforce_companion_access(session, current, request, settings)
     return current
 
 

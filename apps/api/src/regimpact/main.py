@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import logging
+import re
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from . import __version__
 from .api import router as api_router
+from .companion_access import record_companion_response
 from .config import get_settings
 from .controls_api import router as controls_router
 from .ingestion import MalwareScannerUnavailableError
@@ -27,7 +30,10 @@ from .observability import (
 )
 from .operations_api import dependency_checks, reliability_metrics
 from .repository import RegulationNotFoundError
+from .retrieval import SearchUnavailableError
 from .review_workflow import ReviewConflictError
+
+REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 def create_app() -> FastAPI:
@@ -43,7 +49,12 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):  # type: ignore[no-untyped-def]
-        request_id = request.headers.get("X-Request-ID") or str(uuid4())
+        supplied_request_id = request.headers.get("X-Request-ID", "")
+        request_id = (
+            supplied_request_id
+            if REQUEST_ID_RE.fullmatch(supplied_request_id)
+            else str(uuid4())
+        )
         request.state.request_id = request_id
         trace_id, response_traceparent = trace_context(request.headers.get("traceparent"))
         request.state.trace_id = trace_id
@@ -71,6 +82,25 @@ def create_app() -> FastAPI:
             )
             raise
         route = getattr(request.scope.get("route"), "path", "unmatched")
+        if hasattr(request.state, "companion_audit"):
+            try:
+                with Session(bind=request.state.companion_audit_bind) as audit_session:
+                    record_companion_response(audit_session, request, response.status_code)
+            except SQLAlchemyError:
+                logger.exception(
+                    "companion audit persistence failed",
+                    extra={"event": "companion_audit_failed", "route": route},
+                )
+                response = JSONResponse(
+                    status_code=503,
+                    content={
+                        "error": {
+                            "code": "dependency_unavailable",
+                            "message": "Companion audit persistence is temporarily unavailable.",
+                            "request_id": request_id,
+                        }
+                    },
+                )
         duration = metrics.finish(request.method, route, response.status_code, started)
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Trace-ID"] = trace_id
@@ -105,6 +135,22 @@ def create_app() -> FastAPI:
             },
         )
 
+    @app.exception_handler(SearchUnavailableError)
+    async def search_unavailable(
+        request: Request, exc: SearchUnavailableError
+    ) -> JSONResponse:
+        del exc
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "search_unavailable",
+                    "message": "Regulatory evidence search is temporarily unavailable.",
+                    "request_id": request.state.request_id,
+                }
+            },
+        )
+
     @app.exception_handler(RequestValidationError)
     async def request_validation(request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(
@@ -126,6 +172,10 @@ def create_app() -> FastAPI:
             if exc.status_code == 401
             else "forbidden"
             if exc.status_code == 403
+            else "rate_limited"
+            if exc.status_code == 429
+            else "dependency_unavailable"
+            if exc.status_code == 503
             else "http_error"
         )
         headers = exc.headers or {}
