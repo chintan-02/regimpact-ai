@@ -22,7 +22,10 @@ from .config import get_settings
 from .database import get_session
 from .db_models import (
     ClauseClassificationRecord,
+    ControlRecord,
+    ControlVersionRecord,
     IngestionJobRecord,
+    ObligationControlMappingRecord,
     ObligationRecord,
     OutboxEventRecord,
     RegulationRecord,
@@ -37,16 +40,25 @@ from .ingestion import DevelopmentAllowScanner, MalwareScanner, UnavailableScann
 from .ingestion_service import queue_ingestion, replay_dead_letter
 from .obligation_service import extract_and_store_obligations
 from .repository import RegulationNotFoundError, SqlAlchemyVersionRepository, create_regulation
-from .retrieval import hybrid_search, index_version
+from .retrieval import (
+    SearchUnavailableError,
+    ensure_search_ready,
+    hybrid_search,
+    index_version,
+    section_content_hash,
+)
 from .schemas import (
     CalibrationBinResponse,
     CalibrationPolicyResponse,
+    CanonicalEvidenceResponse,
     ChangeDetail,
     ChangeRegisterItem,
     ChangeResponse,
     CitationResponse,
     ClauseClassificationResponse,
     ClauseClassificationRunResponse,
+    EvidenceControlMappingReference,
+    EvidenceObligationReference,
     HybridSearchResponse,
     IngestionJobResponse,
     IngestionJobState,
@@ -143,6 +155,8 @@ def add_regulation(
 def list_regulations(
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[RegulationListItem]:
     latest = (
         select(
@@ -182,7 +196,9 @@ def list_regulations(
         .outerjoin(changes, changes.c.regulation_id == RegulationRecord.id)
         .outerjoin(sources, sources.c.regulation_id == RegulationRecord.id)
         .where(RegulationRecord.organization_id == organization_id)
-        .order_by(RegulationRecord.title)
+        .order_by(RegulationRecord.title, RegulationRecord.id)
+        .limit(limit)
+        .offset(offset)
     ).all()
     typed_rows = cast(
         list[tuple[RegulationRecord, int | None, datetime | None, int, int]],
@@ -250,6 +266,8 @@ def list_versions(
     regulation_id: UUID,
     session: DbSession,
     organization_id: Annotated[UUID, Depends(organization_header)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[VersionSummary]:
     SqlAlchemyVersionRepository(session, organization_id, "system:read").owned_regulation(
         regulation_id
@@ -276,7 +294,9 @@ def list_versions(
         .outerjoin(section_counts, section_counts.c.version_id == RegulationVersionRecord.id)
         .outerjoin(change_counts, change_counts.c.version_id == RegulationVersionRecord.id)
         .where(RegulationVersionRecord.regulation_id == regulation_id)
-        .order_by(RegulationVersionRecord.ordinal.desc())
+        .order_by(RegulationVersionRecord.ordinal.desc(), RegulationVersionRecord.id)
+        .limit(limit)
+        .offset(offset)
     ).all()
     typed_rows = cast(list[tuple[RegulationVersionRecord, int, int]], rows)
     return [
@@ -320,7 +340,11 @@ def list_changes(
         .join(current, current.id == SectionChangeRecord.current_version_id)
         .outerjoin(previous, previous.id == SectionChangeRecord.previous_version_id)
         .where(RegulationRecord.organization_id == organization_id)
-        .order_by(current.ingested_at.desc(), SectionChangeRecord.section_key)
+        .order_by(
+            current.ingested_at.desc(),
+            SectionChangeRecord.section_key,
+            SectionChangeRecord.id,
+        )
         .limit(limit)
         .offset(offset)
     )
@@ -612,6 +636,8 @@ def _obligation_response(
         page=obligation.page,
         source_uri=version.source_uri,
         version_ordinal=version.ordinal,
+        version_content_hash=version.content_hash,
+        section_content_hash=section_content_hash(section.heading, section.body),
         created_at=obligation.created_at,
     )
 
@@ -716,7 +742,7 @@ def list_obligations(
     regulation_id: UUID | None = None,
     version_id: UUID | None = None,
     status_filter: Annotated[str | None, Query(alias="status", max_length=30)] = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ObligationResponse]:
     statement = (
@@ -861,6 +887,103 @@ def create_search_index(
     )
 
 
+@router.get("/evidence/{section_id}", response_model=CanonicalEvidenceResponse)
+def get_canonical_evidence(
+    section_id: UUID,
+    version_id: UUID,
+    version_content_hash: Annotated[str, Query(pattern=r"^[0-9a-f]{64}$")],
+    section_hash: Annotated[str, Query(pattern=r"^[0-9a-f]{64}$")],
+    session: DbSession,
+    organization_id: Annotated[UUID, Depends(organization_header)],
+) -> CanonicalEvidenceResponse:
+    row = session.execute(
+        select(SectionRecord, RegulationVersionRecord, RegulationRecord)
+        .join(RegulationVersionRecord, RegulationVersionRecord.id == SectionRecord.version_id)
+        .join(RegulationRecord, RegulationRecord.id == RegulationVersionRecord.regulation_id)
+        .where(
+            SectionRecord.id == section_id,
+            SectionRecord.version_id == version_id,
+            RegulationRecord.organization_id == organization_id,
+        )
+    ).one_or_none()
+    if row is None:
+        raise RegulationNotFoundError("evidence not found")
+    section, version, regulation = row
+    actual_section_hash = section_content_hash(section.heading, section.body)
+    if version.content_hash != version_content_hash or actual_section_hash != section_hash:
+        raise RegulationNotFoundError("evidence not found")
+
+    obligations = list(
+        session.scalars(
+            select(ObligationRecord)
+            .where(
+                ObligationRecord.organization_id == organization_id,
+                ObligationRecord.section_id == section_id,
+                ObligationRecord.version_id == version_id,
+            )
+            .order_by(ObligationRecord.id)
+        )
+    )
+    obligation_ids = [obligation.id for obligation in obligations]
+    mapping_rows: list[
+        tuple[ObligationControlMappingRecord, ControlVersionRecord, ControlRecord]
+    ] = []
+    if obligation_ids:
+        mapping_rows = list(
+            session.execute(
+                select(
+                    ObligationControlMappingRecord,
+                    ControlVersionRecord,
+                    ControlRecord,
+                )
+                .join(
+                    ControlVersionRecord,
+                    ControlVersionRecord.id
+                    == ObligationControlMappingRecord.control_version_id,
+                )
+                .join(ControlRecord, ControlRecord.id == ControlVersionRecord.control_id)
+                .where(
+                    ObligationControlMappingRecord.organization_id == organization_id,
+                    ObligationControlMappingRecord.obligation_id.in_(obligation_ids),
+                    ControlRecord.organization_id == organization_id,
+                )
+                .order_by(ObligationControlMappingRecord.id)
+            )
+            .tuples()
+            .all()
+        )
+    max_chars = get_settings().companion_max_evidence_chars
+    return CanonicalEvidenceResponse(
+        organization_id=organization_id,
+        regulation_id=regulation.id,
+        version_id=version.id,
+        version_ordinal=version.ordinal,
+        version_content_hash=version.content_hash,
+        section_id=section.id,
+        section_key=section.section_key,
+        section_content_hash=actual_section_hash,
+        heading=section.heading,
+        body=section.body[:max_chars],
+        body_truncated=len(section.body) > max_chars,
+        page=section.page,
+        source_uri=version.source_uri,
+        obligations=[
+            EvidenceObligationReference(obligation_id=obligation.id)
+            for obligation in obligations
+        ],
+        control_mappings=[
+            EvidenceControlMappingReference(
+                mapping_id=mapping.id,
+                obligation_id=mapping.obligation_id,
+                control_id=control.id,
+                control_version_id=control_version.id,
+                status=mapping.status,
+            )
+            for mapping, control_version, control in mapping_rows
+        ],
+    )
+
+
 @router.get("/search", response_model=HybridSearchResponse)
 def search_regulatory_evidence(
     session: DbSession,
@@ -869,20 +992,41 @@ def search_regulatory_evidence(
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> HybridSearchResponse:
     settings = get_settings()
-    provider = configured_embedding_provider(
-        environment=settings.environment,
-        provider_name=settings.embedding_provider,
-        model_name=settings.embedding_model,
-    )
-    hits = hybrid_search(
-        session,
-        organization_id=organization_id,
-        query=q,
-        provider=provider,
-        limit=limit,
-    )
+    try:
+        provider = configured_embedding_provider(
+            environment=settings.environment,
+            provider_name=settings.embedding_provider,
+            model_name=settings.embedding_model,
+        )
+        ensure_search_ready(
+            session,
+            organization_id=organization_id,
+            provider=provider,
+        )
+    except (RuntimeError, ValueError, SearchUnavailableError) as exc:
+        raise SearchUnavailableError("search_unavailable") from exc
+    try:
+        hits = hybrid_search(
+            session,
+            organization_id=organization_id,
+            query=q,
+            provider=provider,
+            limit=limit,
+        )
+    except (RuntimeError, OSError) as exc:
+        raise SearchUnavailableError("search_unavailable") from exc
+    max_chars = settings.companion_max_evidence_chars
     return HybridSearchResponse(
         query=q,
         result_count=len(hits),
-        results=[RetrievalHitResponse(**asdict(hit)) for hit in hits],
+        results=[
+            RetrievalHitResponse(
+                **{
+                    **asdict(hit),
+                    "body": hit.body[:max_chars],
+                    "body_truncated": len(hit.body) > max_chars,
+                }
+            )
+            for hit in hits
+        ],
     )

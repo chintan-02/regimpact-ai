@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
 from regimpact.auth import CurrentUser, get_current_user, require_roles
 from regimpact.config import Settings
@@ -30,6 +31,10 @@ API_AUDIENCE = "22222222-2222-4222-8222-222222222222"
 ISSUER = f"https://login.microsoftonline.com/{TENANT_ID}/v2.0"
 JWKS_URL = f"https://login.microsoftonline.com/{TENANT_ID}/discovery/v2.0/keys"
 LEGACY_SECRET = "test-legacy-secret-that-is-long-enough"
+
+
+def _request() -> Request:
+    return Request({"type": "http", "method": "GET", "path": "/api/v1/auth/me", "headers": []})
 
 
 def _b64(value: bytes) -> str:
@@ -551,7 +556,7 @@ class EntraPrincipalMappingTests(TestCase):
             patch("regimpact.auth.get_settings", return_value=self.settings),
             patch("regimpact.auth.get_jwks_provider", return_value=self.provider),
         ):
-            return get_current_user(self.session, f"Bearer {token}", None, None)
+            return get_current_user(self.session, _request(), f"Bearer {token}", None, None)
 
     def test_entra_claims_map_to_existing_user_without_granting_token_roles(self) -> None:
         current = self.authenticate(self.token(str(self.external_oid)))
@@ -615,6 +620,7 @@ class EntraPrincipalMappingTests(TestCase):
         ):
             get_current_user(
                 self.session,
+                _request(),
                 None,
                 self.organization_id,
                 "spoofed-admin",

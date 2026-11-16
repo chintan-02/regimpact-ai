@@ -802,6 +802,73 @@ class ExternalIdentityMigrationTests(TestCase):
                     ]
                 self.assertEqual(upgraded_users, existing_users)
 
+                command.upgrade(config, "20261115_0014")
+                companion_schema = inspect(engine)
+                self.assertIn(
+                    "companion_client_grants",
+                    companion_schema.get_table_names(schema=schema_name),
+                )
+                self.assertEqual(
+                    {
+                        constraint["name"]
+                        for constraint in companion_schema.get_unique_constraints(
+                            "companion_client_grants", schema=schema_name
+                        )
+                    },
+                    {"uq_companion_grant_org_tenant_client"},
+                )
+                self.assertEqual(
+                    {
+                        constraint["name"]
+                        for constraint in companion_schema.get_check_constraints(
+                            "companion_client_grants", schema=schema_name
+                        )
+                    },
+                    {
+                        "ck_companion_grant_active_state",
+                        "ck_companion_grant_no_wildcard",
+                    },
+                )
+                companion_foreign_keys = companion_schema.get_foreign_keys(
+                    "companion_client_grants", schema=schema_name
+                )
+                self.assertTrue(
+                    any(
+                        key["name"] == "fk_companion_grant_organization"
+                        and key["referred_table"] == "organizations"
+                        and key["options"].get("ondelete") == "RESTRICT"
+                        for key in companion_foreign_keys
+                    )
+                )
+                with engine.begin() as connection:
+                    connection.execute(
+                        text(
+                            "INSERT INTO companion_client_grants "
+                            "(id, organization_id, tenant_id, client_id, "
+                            "delegated_scopes_json, active, created_by_actor_id, "
+                            "updated_by_actor_id, created_at, updated_at, disabled_at) VALUES "
+                            "(:id, :organization_id, :tenant_id, :client_id, "
+                            "'[\"regulations:read\"]', true, 'operator:test', "
+                            "'operator:test', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)"
+                        ),
+                        {
+                            "id": uuid4(),
+                            "organization_id": organization_id,
+                            "tenant_id": tenant_id,
+                            "client_id": uuid4(),
+                        },
+                    )
+                command.downgrade(config, "20261115_0013")
+                after_companion_downgrade = inspect(engine)
+                self.assertNotIn(
+                    "companion_client_grants",
+                    after_companion_downgrade.get_table_names(schema=schema_name),
+                )
+                self.assertIn(
+                    "external_identities",
+                    after_companion_downgrade.get_table_names(schema=schema_name),
+                )
+
                 command.downgrade(config, "20260903_0012")
                 downgraded_schema = inspect(engine)
                 self.assertNotIn(

@@ -254,6 +254,8 @@ class ObligationResponse(BaseModel):
     page: int | None
     source_uri: str
     version_ordinal: int
+    version_content_hash: str
+    section_content_hash: str
     created_at: datetime
 
 
@@ -327,6 +329,9 @@ class RetrievalHitResponse(BaseModel):
     page: int | None
     source_uri: str
     version_ordinal: int
+    version_content_hash: str
+    section_content_hash: str
+    body_truncated: bool = False
     score: float
     lexical_score: float
     vector_score: float
@@ -337,6 +342,36 @@ class HybridSearchResponse(BaseModel):
     query: str
     result_count: int
     results: list[RetrievalHitResponse]
+
+
+class EvidenceObligationReference(BaseModel):
+    obligation_id: UUID
+
+
+class EvidenceControlMappingReference(BaseModel):
+    mapping_id: UUID
+    obligation_id: UUID
+    control_id: UUID
+    control_version_id: UUID
+    status: str
+
+
+class CanonicalEvidenceResponse(BaseModel):
+    organization_id: UUID
+    regulation_id: UUID
+    version_id: UUID
+    version_ordinal: int
+    version_content_hash: str
+    section_id: UUID
+    section_key: str
+    section_content_hash: str
+    heading: str
+    body: str
+    body_truncated: bool
+    page: int | None
+    source_uri: str
+    obligations: list[EvidenceObligationReference]
+    control_mappings: list[EvidenceControlMappingReference]
 
 
 class ControlCreate(BaseModel):

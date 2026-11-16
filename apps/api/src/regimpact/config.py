@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     entra_max_token_lifetime_seconds: int = Field(default=5_400, ge=600, le=86_400)
     entra_jwks_timeout_seconds: float = Field(default=5.0, ge=0.1, le=30.0)
     entra_jwks_cache_seconds: int = Field(default=3_600, ge=60, le=21_600)
+    companion_access_enabled: bool = False
+    companion_client_id: str = ""
+    companion_rate_limit_per_minute: int = Field(default=120, ge=1, le=10_000)
+    companion_search_rate_limit_per_minute: int = Field(default=30, ge=1, le=1_000)
+    companion_rate_limit_timeout_seconds: float = Field(default=1.0, ge=0.1, le=5.0)
+    companion_max_evidence_chars: int = Field(default=50_000, ge=1_000, le=200_000)
     demo_mode: bool = False
     demo_admin_email: str = "admin@northstar.local"
     demo_admin_password: str = ""
@@ -120,6 +126,22 @@ class Settings(BaseSettings):
                         "REGIMPACT_ENTRA_JWKS_URL must be the tenant-specific Microsoft "
                         "Entra JWKS endpoint"
                     )
+        if self.companion_client_id:
+            try:
+                companion_client_id = UUID(self.companion_client_id)
+            except ValueError as exc:
+                raise ValueError("REGIMPACT_COMPANION_CLIENT_ID must be a UUID") from exc
+            if self.entra_api_audience and str(companion_client_id) == self.entra_api_audience:
+                raise ValueError(
+                    "REGIMPACT_COMPANION_CLIENT_ID must differ from the API audience"
+                )
+        if self.companion_access_enabled:
+            if self.auth_mode not in {"dual", "entra"}:
+                raise ValueError("companion access requires dual or entra authentication")
+            if not self.companion_client_id:
+                raise ValueError(
+                    "companion access requires REGIMPACT_COMPANION_CLIENT_ID"
+                )
         if is_production and self.demo_mode:
             raise ValueError("REGIMPACT_DEMO_MODE must be disabled in production")
         if self.demo_mode and self.auth_mode == "entra":

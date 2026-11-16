@@ -122,3 +122,15 @@ class ControlsApiTests(TestCase):
 
         self.assertEqual(controls.json(), [])
         self.assertEqual(mappings.json(), [])
+
+    def test_companion_collection_bounds_and_filters(self) -> None:
+        controls = asyncio.run(self.request("/api/v1/controls?limit=1&offset=0"))
+        control_overflow = asyncio.run(self.request("/api/v1/controls?limit=201"))
+        mapping_overflow = asyncio.run(self.request("/api/v1/control-mappings?limit=201"))
+        missing = asyncio.run(
+            self.request(f"/api/v1/control-mappings?obligation_id={uuid4()}")
+        )
+        self.assertEqual(len(controls.json()), 1)
+        self.assertEqual(control_overflow.status_code, 422)
+        self.assertEqual(mapping_overflow.status_code, 422)
+        self.assertEqual(missing.json(), [])

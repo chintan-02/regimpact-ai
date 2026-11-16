@@ -16,6 +16,9 @@ from .domain import utc_now
 
 ENTRA_PROVIDER = "entra"
 EXTERNAL_IDENTITY_REVISION = "20261115_0013"
+EXTERNAL_IDENTITY_COMPATIBLE_REVISIONS = frozenset(
+    {EXTERNAL_IDENTITY_REVISION, "20261115_0014"}
+)
 BOOTSTRAP_ACKNOWLEDGEMENT = "I ACKNOWLEDGE THIS CREATES THE FIRST ENTRA ADMIN MAPPING"
 ROLLBACK_ACKNOWLEDGEMENT = (
     "I ACKNOWLEDGE LEGACY ROLLBACK REQUIRES RESTORING LEGACY MODE AND ITS SECRET"
@@ -232,7 +235,7 @@ def validate_cutover_readiness(
         ).scalar_one()
     except (SQLAlchemyError, LookupError) as exc:
         raise ExternalIdentityOperationError("external_identity_migration_not_applied") from exc
-    if revision != EXTERNAL_IDENTITY_REVISION:
+    if revision not in EXTERNAL_IDENTITY_COMPATIBLE_REVISIONS:
         raise ExternalIdentityOperationError("external_identity_migration_not_applied")
 
     mappings = list(

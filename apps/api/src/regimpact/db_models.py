@@ -110,6 +110,46 @@ class ExternalIdentityRecord(Base):
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class CompanionClientGrantRecord(Base):
+    """Tenant-bound delegated scopes for the one approved companion client."""
+
+    __tablename__ = "companion_client_grants"
+    __table_args__ = (
+        CheckConstraint(
+            "delegated_scopes_json NOT LIKE '%*%'",
+            name="ck_companion_grant_no_wildcard",
+        ),
+        CheckConstraint(
+            "(active AND disabled_at IS NULL) OR "
+            "(NOT active AND disabled_at IS NOT NULL)",
+            name="ck_companion_grant_active_state",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "tenant_id",
+            "client_id",
+            name="uq_companion_grant_org_tenant_client",
+        ),
+        Index("ix_companion_grant_client_active", "client_id", "active"),
+    )
+
+    id: Mapped[UUID] = mapped_column(SAUuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    tenant_id: Mapped[UUID] = mapped_column(SAUuid, nullable=False)
+    client_id: Mapped[UUID] = mapped_column(SAUuid, nullable=False)
+    delegated_scopes_json: Mapped[str] = mapped_column(Text, nullable=False)
+    active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    created_by_actor_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    updated_by_actor_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class RegulationRecord(Base):
     __tablename__ = "regulations"
     __table_args__ = (

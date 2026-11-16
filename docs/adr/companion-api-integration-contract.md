@@ -1,6 +1,6 @@
 # ADR: Companion API integration contract
 
-Status: proposed
+Status: accepted; RegImpact first-release controls implemented
 
 Date: 2026-11-15
 
@@ -41,10 +41,24 @@ companion as the OBO client, but that fact does not authorize an app-only data c
 Any later application permission requires a new allowlist decision, an application
 role, a local service grant, tenant-isolation tests, and separate audit policy.
 
-Existing domain queries are useful building blocks, but no existing read endpoint is
-approved unchanged for companion traffic. Common scope/client enforcement, durable
-read auditing, bounded pagination, rate limiting, and citation improvements are
-blocking integration controls.
+Existing domain queries are exposed to the companion only through the implemented
+scope/client intersection, durable read audit, bounded pagination, rate limiting, and
+canonical citation controls described below.
+
+## Implementation status
+
+**Implemented in RegImpact:** migration `20261115_0014` adds tenant-bound delegated
+client grants; `apps/api/src/regimpact/companion_access.py` enforces the exact
+route/scope allowlist, emergency shutdown, Redis rate limit and safe auditing;
+`apps/api/src/regimpact/companion_grant_cli.py` provides controlled offline grant
+lifecycle commands; collection routes are bounded; search is readiness-gated; and
+`GET /api/v1/evidence/{section_id}` resolves hash-bound canonical evidence.
+Review/workflow and every mutation route remain excluded.
+
+**Deferred to `regimpact-companion`:** browser PKCE login, companion-audience
+validation, OBO acquisition/cache, answer generation, claim-support evaluation and
+the companion runtime/deployment. Azure registrations, managed identities, private
+networking and live tenant consent remain operator work and are not provisioned here.
 
 ## Trust boundary
 
@@ -140,27 +154,29 @@ companion-specific client and route intersection still needs implementation
 - **Missing**: no current endpoint supplies the required capability or contract.
 
 All current read routes below use `Authenticated`, directly or through an organization
-dependency, so their current local RBAC floor is `viewer`. None currently enforces a
-companion scope, authorized client grant, or companion read-audit event
+dependency, so their local RBAC floor remains `viewer`. For validated Entra calls,
+`get_current_user` now invokes the exact client, route, scope, tenant grant, rate-limit
+and audit boundary in `apps/api/src/regimpact/companion_access.py`
 (`apps/api/src/regimpact/auth.py::Authenticated`;
 `apps/api/src/regimpact/api.py::organization_header`;
 `apps/api/src/regimpact/controls_api.py::organization_header`;
-`apps/api/src/regimpact/review_api.py::organization_header`). The proposed scope is an
-additional intersection, not a replacement for local RBAC.
+`apps/api/src/regimpact/review_api.py::organization_header`). The delegated scope is an
+additional intersection, not a replacement for local RBAC. Legacy console behavior is
+unchanged unless the explicitly configured companion client is used.
 
 | Capability | Method and current path | Implementation | Current local RBAC | Proposed delegated scope | Tenant/ownership rule | Current response schema | Current pagination/filtering | Required companion audit | Status and restriction |
 |---|---|---|---|---|---|---|---|---|---|
-| Regulations | `GET /api/v1/regulations` | `apps/api/src/regimpact/api.py::list_regulations` | `Authenticated` | `regulations:read` | Query filters `RegulationRecord.organization_id` to the mapped local organization | `list[RegulationListItem]` | Ordered by title; no pagination or filters | Outcome, local actor/org, client, route, request/trace IDs, returned regulation IDs/count | Reusable with restriction: add bounded stable pagination, client/scope enforcement, and durable read audit |
-| Regulation versions | `GET /api/v1/regulations/{regulation_id}/versions` | `apps/api/src/regimpact/api.py::list_versions` | `Authenticated` | `regulations:read` | `SqlAlchemyVersionRepository.owned_regulation` verifies the parent organization before listing its versions | `list[VersionSummary]` | Ordered by ordinal descending; no pagination | As above plus regulation ID and returned version IDs | Reusable with restriction: add pagination and common controls; `content_hash` already provides version identity |
-| Sections and source text | No section/source-text read route; `GET /api/v1/sources` lists monitored-source configuration, not stored source text | Section rows are used internally by `apps/api/src/regimpact/retrieval.py::hybrid_search`; source configuration is returned by `apps/api/src/regimpact/api.py::list_regulatory_sources` | None for section/source text; `Authenticated` for source configuration | `evidence:read` | Must resolve through an organization-owned regulation/version/section chain | No canonical section/evidence response; `RegulatorySourceResponse` is not evidence | None for sections/source text; source configuration list is unbounded | Requested/resolved organization-safe stable IDs and outcome; never raw token or claim data | Missing: define a canonical, bounded evidence resolver; do not repurpose source-configuration listing; route name is intentionally unresolved |
+| Regulations | `GET /api/v1/regulations` | `apps/api/src/regimpact/api.py::list_regulations` | `Authenticated` | `regulations:read` | Query filters `RegulationRecord.organization_id` to the mapped local organization | `list[RegulationListItem]` | `limit` 1--200 (default 100), `offset`; title/ID order | Outcome, local actor/org, client, route and correlation | Reusable: companion enforcement, pagination and durable audit implemented |
+| Regulation versions | `GET /api/v1/regulations/{regulation_id}/versions` | `apps/api/src/regimpact/api.py::list_versions` | `Authenticated` | `regulations:read` | `SqlAlchemyVersionRepository.owned_regulation` verifies the parent organization before listing its versions | `list[VersionSummary]` | `limit` 1--200 (default 100), `offset`; ordinal/ID order | As above plus regulation ID | Reusable: bounded, audited and hash-versioned |
+| Sections and source text | `GET /api/v1/evidence/{section_id}` | `apps/api/src/regimpact/api.py::get_canonical_evidence` | `Authenticated` | `evidence:read` | Resolves exact organization/version/section chain and rejects hash/version mismatch as not found | `CanonicalEvidenceResponse` | Single resource; required version and content hashes; bounded body | Stable IDs, scope, route, outcome and correlation; no body | Reusable: canonical hash-bound evidence resolver implemented |
 | Version differences | `GET /api/v1/changes` | `apps/api/src/regimpact/api.py::list_changes` | `Authenticated` | `changes:read` | Join to `RegulationRecord` and filter its organization; optional regulation filter remains within that boundary | `list[ChangeRegisterItem]` | `regulation_id`, `latest_only`; `limit` 1--200 (default 100), `offset` | Filters, returned change IDs/count, local actor/org/client and correlation | Reusable with restriction: common controls and a durable read audit |
 | Version difference detail | `GET /api/v1/changes/{change_id}` | `apps/api/src/regimpact/api.py::get_change` | `Authenticated` | `changes:read` | Change is joined to an organization-owned regulation; absent and foreign IDs share not-found behavior | `ChangeDetail` with previous/current text and `CitationResponse` | Single resource | Change/version IDs and outcome; do not duplicate text in audit | Reusable with restriction: citation lacks section/regulation/content-hash identity |
-| Obligations | `GET /api/v1/obligations` | `apps/api/src/regimpact/api.py::list_obligations` | `Authenticated` | `evidence:read` | Join through regulation and filter its organization | `list[ObligationResponse]` | `regulation_id`, `version_id`, `status`; `limit` 1--500 (default 100), `offset` | Filters and returned obligation/version IDs/count | Reusable with restriction: enforce companion hard cap 200, add version content hash, and common controls |
-| Clause classifications | `GET /api/v1/clause-classifications` | `apps/api/src/regimpact/api.py::list_clause_classifications` | `Authenticated` | `evidence:read` | Join through regulation and filter its organization | `list[ClauseClassificationResponse]` | `version_id`, `model_id`, `status`; `limit` 1--2,000 (default 200), `offset` | Filters, model ID, returned classification/section IDs/count | Reusable with restriction: cap companion pages at 200 and treat model/confidence as metadata, not verified fact |
-| Controls | `GET /api/v1/controls` | `apps/api/src/regimpact/controls_api.py::list_controls` | `Authenticated` | `controls:read` | Filters active controls by the mapped organization and returns latest version | `list[ControlResponse]` | Ordered by control key; no pagination or filters | Returned control/version IDs/count and outcome | Reusable with restriction: add bounded stable pagination and common controls |
-| Obligation-control mappings | `GET /api/v1/control-mappings` | `apps/api/src/regimpact/controls_api.py::list_control_mappings` | `Authenticated` | `controls:read` | Filters mapping organization, then joins control/version data | `list[ControlMappingListItem]` | `limit` 1--500 (default 100); score order; no offset or resource filters | Returned mapping, obligation, and control-version IDs/count | Reusable with restriction: cap at 200, add offset/cursor and resource filters, and verify related obligation ownership explicitly |
-| Hybrid/semantic search | `GET /api/v1/search` | `apps/api/src/regimpact/api.py::search_regulatory_evidence`; `apps/api/src/regimpact/retrieval.py::hybrid_search` | `Authenticated` | `evidence:read` | Both lexical and semantic queries constrain organization and configured embedding model; results join organization-owned records | `HybridSearchResponse` containing `RetrievalHitResponse` | `q` length 2--500; `limit` 1--50 (default 10); no regulation/version filter | Hash of normalized query, result IDs/count, model ID, timing and outcome; never raw query/body in general logs | Reusable with restriction: require per-client limit/rate control, index readiness, production embedding configuration, filters, and complete citation identity |
-| Canonical evidence/citation resolution | No read route | Partial citation construction in `apps/api/src/regimpact/api.py::get_change` and retrieval hits in `apps/api/src/regimpact/retrieval.py::hybrid_search` | None | `evidence:read` | Must resolve all IDs through one organization-owned chain | No complete canonical schema | None | Stable IDs, version hash, locator, resolution outcome | Missing: required before the companion may present source-grounded answers |
+| Obligations | `GET /api/v1/obligations` | `apps/api/src/regimpact/api.py::list_obligations` | `Authenticated` | `evidence:read` | Join through regulation and filter its organization | `list[ObligationResponse]` | `regulation_id`, `version_id`, `status`; `limit` 1--200 (default 100), `offset` | Filters, route outcome and correlation | Reusable: version and section hashes included |
+| Clause classifications | `GET /api/v1/clause-classifications` | `apps/api/src/regimpact/api.py::list_clause_classifications` | `Authenticated` | Not allowlisted | Join through regulation and filter its organization | `list[ClauseClassificationResponse]` | Internal route contract unchanged | None for companion because access is denied | Reusable with restriction but deferred: governance approval and companion-safe presentation are still required |
+| Controls | `GET /api/v1/controls` | `apps/api/src/regimpact/controls_api.py::list_controls` | `Authenticated` | `controls:read` | Filters active controls by organization and returns latest version | `list[ControlResponse]` | `limit` 1--200 (default 100), `offset`; control-key/ID order | Route outcome and correlation | Reusable: bounded and audited |
+| Obligation-control mappings | `GET /api/v1/control-mappings` | `apps/api/src/regimpact/controls_api.py::list_control_mappings` | `Authenticated` | `controls:read` | Filters mapping, obligation and control organizations | `list[ControlMappingListItem]` | Obligation/control-version filters; `limit` 1--200, `offset`; score/ID order | Route outcome and correlation | Reusable: bounded related-resource ownership enforced |
+| Hybrid/semantic search | `GET /api/v1/search` | `apps/api/src/regimpact/api.py::search_regulatory_evidence`; `apps/api/src/regimpact/retrieval.py::hybrid_search` | `Authenticated` | `evidence:read` | Search and readiness queries constrain organization and model | `HybridSearchResponse` with complete version/section hashes | `q` length 2--500; `limit` 1--50 | Normalized query hash, route outcome and correlation; never raw query/body | Reusable after operator provisions the production provider and complete index; readiness and rate limits fail closed |
+| Canonical evidence/citation resolution | `GET /api/v1/evidence/{section_id}` | `apps/api/src/regimpact/api.py::get_canonical_evidence` | `Authenticated` | `evidence:read` | Organization/version/section and related obligation/control chains are verified | `CanonicalEvidenceResponse` | Required version ID/hash and section hash; single bounded response | Stable IDs, route outcome and correlation | Reusable: stale, mismatched and foreign references are not found |
 | Review queue status | `GET /api/v1/review-queue` | `apps/api/src/regimpact/review_api.py::review_queue` | `Authenticated` | `reviews:read` | `_review_items` builds only records for the mapped organization | `ReviewQueueResponse` | State, regulation, section, control, text, confidence and sort filters; `limit` 1--200 (default 50), `offset`; total | Filters, returned obligation IDs/count, client and correlation; no rationale/evidence text | Reusable with restriction and not in the minimum release: data is operationally sensitive and filtering currently materializes the organization's queue in memory |
 | Review item status | `GET /api/v1/review-queue/{obligation_id}` | `apps/api/src/regimpact/review_api.py::review_detail` | `Authenticated` | `reviews:read` | Lookup occurs only within organization-scoped `_review_items`; foreign IDs are not found | `ReviewQueueItem` | Single resource | Obligation ID and outcome; omit evidence/rationale text from audit | Reusable with restriction and not in the minimum release: expose only after review-data governance approval |
 | Controlled workflow status | `GET /api/v1/agent-workflows` | `apps/api/src/regimpact/agent_api.py::list_workflows` | `Authenticated` | `workflows:read` | Filters `AgentWorkflowRunRecord.organization_id` | `list[AgentWorkflowResponse]` | `limit` 1--200 (default 100); newest first; no offset | Returned run/obligation IDs/count and outcome | Reusable with restriction and not in the minimum release: response includes plan, evidence, proposal, policy results, creator and latest decision; add pagination and governance approval |
@@ -309,20 +325,18 @@ scores as legal or compliance confidence.
 **Decision:** companion collection reads use stable ordering, default page size 100,
 and a hard page size of 200. Search uses its current default 10 and hard maximum 50.
 The API must reject larger requests with `422`; it must not silently clamp them.
-Endpoints currently unbounded or allowing 500/2,000 results require a companion-safe
-limit before exposure. Offset pagination may be retained initially, but every endpoint
+All companion collection routes now enforce this bound. Excluded classification,
+review and workflow routes retain their separate internal contracts. Offset
+pagination is retained initially, but every companion endpoint
 must have deterministic tie-break ordering. New or high-churn collections should use
 opaque cursors. The response shape and total-count policy must be documented before
 the client is generated.
 
-Current bounds are implemented inconsistently: changes and review queue already cap at
-200; search caps at 50; obligations and control mappings cap at 500; classifications
-cap at 2,000; regulations, versions and controls are unbounded; workflow lists have a
-limit but no offset (`apps/api/src/regimpact/api.py::list_changes`,
-`list_obligations`, `list_clause_classifications`, `search_regulatory_evidence`;
+Current companion bounds are consistent: collection reads cap at 200 and search caps
+at 50 (`apps/api/src/regimpact/api.py::list_regulations`, `list_versions`,
+`list_changes`, `list_obligations`, `search_regulatory_evidence`;
 `apps/api/src/regimpact/controls_api.py::list_controls`, `list_control_mappings`;
-`apps/api/src/regimpact/review_api.py::review_queue`;
-`apps/api/src/regimpact/agent_api.py::list_workflows`).
+`apps/api/tests/test_read_api.py`; `apps/api/tests/test_controls_api.py`).
 
 ### Timeouts, retries, and idempotency
 
@@ -354,9 +368,9 @@ limit but no offset (`apps/api/src/regimpact/api.py::list_changes`,
   decision/reason category, status, bounded resource/result IDs, request/trace IDs,
   and duration. Search audits store a one-way hash of the normalized query, result IDs,
   count and model ID rather than raw query text.
-- Current durable `AuditEventRecord` has organization, actor, event/entity identity,
-  JSON detail and timestamp, so details can carry most fields, but ordinary reads do
-  not currently write companion audit events
+- Durable `AuditEventRecord` has organization, actor, event/entity identity, JSON
+  detail and timestamp. Authorized companion reads and post-identity denials now write
+  safe companion events through `apps/api/src/regimpact/companion_access.py`
   (`apps/api/src/regimpact/db_models.py::AuditEventRecord`). Denials before an
   organization is known require a separate security sink with the same correlation
   guarantees.
@@ -371,16 +385,16 @@ limit but no offset (`apps/api/src/regimpact/api.py::list_changes`,
 
 ### Rate limiting
 
-**Current -- verified:** no API rate-limiter or `429`/`Retry-After` contract was found
-in `apps/api/src/regimpact/main.py`, the route modules, or their tests.
+**Implemented:** RegImpact enforces Redis-backed limits by registered client,
+organization and capability, with a distinct search budget, bounded Redis timeout,
+generic `503` on limiter failure, deterministic `429` and `Retry-After`
+(`apps/api/src/regimpact/companion_access.py`).
 
-**Decision:** before companion traffic, RegImpact must enforce limits by registered
-client, organization and capability, with a stricter search budget and bounded burst.
 The companion also limits each user/session, but its limit does not replace the API
 limit. A rejected request returns `429` with the standard error envelope and
-`Retry-After`; it does not disclose another tenant's utilization. Limits and emergency
-client shutdown must be adjustable without a code release. Exact quotas are an
-operator/SLO decision and must be load-tested.
+`Retry-After`; it does not disclose another tenant's utilization. Exact production
+quotas remain an operator/SLO decision and must be load-tested. The emergency client
+shutdown is `REGIMPACT_COMPANION_ACCESS_ENABLED=false`.
 
 ### Versioning and compatibility
 
@@ -444,7 +458,14 @@ boundary:
 
 These are reusable internals, not approval to expose the current routes unchanged.
 
-### B. Narrow RegImpact changes required before companion implementation
+### B. RegImpact changes implemented for companion integration
+
+The blocking rows below are implemented by migration `20261115_0014`,
+`apps/api/src/regimpact/companion_access.py`, the allowlisted routes, canonical
+evidence resolver, Redis limiter and their focused tests. The production embedding
+provider/backfill, private deployment, OpenAPI artifact gate and live OBO test remain
+deployment or companion work; they must still pass the acceptance gates before live
+traffic.
 
 | Priority | Required change | Likely implementation files | Required or extended tests |
 |---|---|---|---|

@@ -1,5 +1,22 @@
 # Hybrid regulatory evidence retrieval
 
+## Companion retrieval contract
+
+Companion search remains `GET /api/v1/search` with query length 2--500 and a hard result maximum of
+50. Before embedding the query, RegImpact verifies that every tenant section has a projection for
+the configured model and that indexed section hashes and version relationships match canonical
+records. Missing, stale, inconsistent or unavailable configuration returns generic
+`503 search_unavailable`.
+
+Search hits include regulation/version/section IDs, immutable version and section content hashes,
+source URI/page and model/ranking metadata. Scores rank candidates; they are not evidence or proof.
+Resolve a hit with `GET /api/v1/evidence/{section_id}` and the required `version_id`,
+`version_content_hash`, and `section_hash` query values. A stale, mismatched, unresolved or
+cross-organization reference returns the same `404`. Response text is bounded by
+`REGIMPACT_COMPANION_MAX_EVIDENCE_CHARS`; `body_truncated` is explicit. Citation validity does not
+establish that a generated claim is supported; claim-support evaluation belongs to the future
+companion runtime.
+
 ## Contract
 
 v0.2C indexes immutable regulation sections with organization, regulation, version, section, page, source URI, content hash and embedding-model lineage. Search results always return that citation chain; derived ranking data is never treated as the source of truth.

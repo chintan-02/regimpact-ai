@@ -119,7 +119,7 @@ The preflight is read-only and network-free. Success exits zero and reports only
 form:
 
 ```text
-Cutover preflight passed: revision=20261115_0013 active_mappings=<COUNT> active_admin_mappings=<COUNT>
+Cutover preflight passed: revision=<CURRENT_COMPATIBLE_REVISION> active_mappings=<COUNT> active_admin_mappings=<COUNT>
 ```
 
 Any failure exits nonzero and reports a safe category such as:
@@ -147,6 +147,21 @@ python -m regimpact.external_identity_cli rollback-bootstrap \
 The rollback command cannot run in `entra` mode and cannot alter mappings created through the admin
 API. See [Authentication and role-based access control](authentication-and-rbac.md#cutover-preflight-and-rollback)
 for configuration placeholders, bootstrap constraints, safe output, and recovery details.
+
+### Companion delegated-access gate
+
+Apply migration `20261115_0014` before creating a companion grant. Keep
+`REGIMPACT_COMPANION_ACCESS_ENABLED=false` while running the offline `create` command documented in
+[Authentication and role-based access control](authentication-and-rbac.md#companion-delegated-access).
+The deployment must then verify Redis connectivity, current tenant search-index readiness, the
+exact companion client UUID and scopes, safe audit persistence, rate-limit behavior, and a real
+non-production OBO token before setting the flag to `true`. Stop on any missing/conflicting grant,
+tenant mismatch, disabled client, audit/rate-limit dependency failure or search inconsistency.
+
+Emergency shutdown sets `REGIMPACT_COMPANION_ACCESS_ENABLED=false` and redeploys; durable grants and
+audit records remain intact. Longer rollback uses the offline `disable` command with placeholders
+and the required acknowledgement. This repository does not provision the companion app
+registration, OBO client, managed identity, private network path or companion runtime.
 
 After a staging deployment, run `scripts/validate-azure-staging.sh`. It verifies the provisioning
 state of the API, web, and worker Container Apps plus the migration, dispatcher, and scheduler jobs;

@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session
 from .auth import AdminUser, Authenticated, ReviewerUser
 from .control_mapping import add_control, suggest_mappings
 from .database import get_session
-from .db_models import ControlRecord, ControlVersionRecord, ObligationControlMappingRecord
+from .db_models import (
+    ControlRecord,
+    ControlVersionRecord,
+    ObligationControlMappingRecord,
+    ObligationRecord,
+)
 from .schemas import (
     ControlCreate,
     ControlMappingListItem,
@@ -82,6 +87,8 @@ def create_control(
 def list_controls(
     session: Annotated[Session, Depends(get_session)],
     organization_id: Annotated[UUID, Depends(organization_header)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ControlResponse]:
     latest = _latest_control_versions()
     rows = session.execute(
@@ -96,7 +103,9 @@ def list_controls(
             ControlRecord.organization_id == organization_id,
             ControlRecord.active.is_(True),
         )
-        .order_by(ControlRecord.control_key)
+        .order_by(ControlRecord.control_key, ControlRecord.id)
+        .limit(limit)
+        .offset(offset)
     ).all()
     return [
         ControlResponse(
@@ -121,19 +130,40 @@ def list_controls(
 def list_control_mappings(
     session: Annotated[Session, Depends(get_session)],
     organization_id: Annotated[UUID, Depends(organization_header)],
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    obligation_id: UUID | None = None,
+    control_version_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ControlMappingListItem]:
-    rows = session.execute(
+    statement = (
         select(ObligationControlMappingRecord, ControlRecord)
+        .join(ObligationRecord, ObligationRecord.id == ObligationControlMappingRecord.obligation_id)
         .join(
             ControlVersionRecord,
             ControlVersionRecord.id == ObligationControlMappingRecord.control_version_id,
         )
         .join(ControlRecord, ControlRecord.id == ControlVersionRecord.control_id)
-        .where(ObligationControlMappingRecord.organization_id == organization_id)
-        .order_by(ObligationControlMappingRecord.score.desc())
+        .where(
+            ObligationControlMappingRecord.organization_id == organization_id,
+            ObligationRecord.organization_id == organization_id,
+            ControlRecord.organization_id == organization_id,
+        )
+        .order_by(
+            ObligationControlMappingRecord.score.desc(),
+            ObligationControlMappingRecord.id,
+        )
         .limit(limit)
-    ).all()
+        .offset(offset)
+    )
+    if obligation_id is not None:
+        statement = statement.where(
+            ObligationControlMappingRecord.obligation_id == obligation_id
+        )
+    if control_version_id is not None:
+        statement = statement.where(
+            ObligationControlMappingRecord.control_version_id == control_version_id
+        )
+    rows = session.execute(statement).all()
     return [
         ControlMappingListItem(
             id=mapping.id,

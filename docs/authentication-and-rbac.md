@@ -2,9 +2,10 @@
 
 RegImpact supports a fail-closed migration from its application-issued HS256 tokens to Microsoft
 Entra access tokens. The API resolves the organization, actor, and role from the authenticated
-database user on every request. Token scopes and application roles are exposed separately to the
-authenticated principal, but neither grants a RegImpact permission in this milestone. Existing
-database RBAC and tenant/resource checks remain authoritative.
+database user on every request. Token scopes and application roles are exposed separately. For the
+companion client, a delegated scope is one required input to the authorization intersection; it
+never grants a RegImpact permission by itself. Existing database RBAC and tenant/resource checks
+remain authoritative.
 
 The current Next.js boundary stores the legacy token in an HTTP-only, same-site cookie so browser
 JavaScript cannot read it. Entra browser login and OBO token acquisition are not implemented yet.
@@ -133,7 +134,7 @@ python -m regimpact.external_identity_cli preflight \
 ```
 
 The preflight performs no writes and no network calls. It fails unless the Entra configuration is
-valid, migration `20261115_0013` is current, mappings are unambiguous and tenant-consistent, and at
+valid, migration `20261115_0013` is applied (including compatible head `20261115_0014`), mappings are unambiguous and tenant-consistent, and at
 least one active mapping resolves to an active local administrator. A deployment runbook must make
 this command a required gate before enabling `entra`; retaining the previous legacy secret in the
 approved secret store is part of the acknowledgement.
@@ -164,6 +165,41 @@ administrator also cannot disable another administrator's mapping when it is the
 mapping for that organization and configured tenant. In `legacy` or `dual`, the legacy
 authentication path remains the documented recovery route.
 
+## Companion delegated access
+
+Migration `20261115_0014` adds durable organization/tenant/client grants containing only the four
+approved delegated scopes: `regulations:read`, `changes:read`, `evidence:read`, and
+`controls:read`. Wildcards and application roles are rejected. The configured client is denied
+from every method/route outside the explicit read allowlist, including review/workflow reads and
+all mutations. `REGIMPACT_COMPANION_ACCESS_ENABLED=false` is the emergency kill switch. OBO token
+acquisition, browser login and the companion runtime remain deferred to the separate companion.
+
+Grant management is offline-only and requires an existing active local administrator plus an
+explicit acknowledgement. With validated Entra/database configuration already supplied, use
+placeholders only:
+
+```bash
+python -m regimpact.companion_grant_cli create \
+  --admin-user-id '<LOCAL_ADMIN_USER_UUID>' \
+  --scope 'regulations:read' --scope 'changes:read' \
+  --scope 'evidence:read' --scope 'controls:read' \
+  --acknowledge 'I ACKNOWLEDGE THIS AUTHORIZES DELEGATED COMPANION READ ACCESS'
+
+python -m regimpact.companion_grant_cli change-scopes \
+  --grant-id '<COMPANION_GRANT_UUID>' --admin-user-id '<LOCAL_ADMIN_USER_UUID>' \
+  --scope 'regulations:read' --scope 'evidence:read' \
+  --acknowledge 'I ACKNOWLEDGE THIS CHANGES DELEGATED COMPANION READ ACCESS'
+
+python -m regimpact.companion_grant_cli disable \
+  --grant-id '<COMPANION_GRANT_UUID>' --admin-user-id '<LOCAL_ADMIN_USER_UUID>' \
+  --acknowledge 'I ACKNOWLEDGE THIS DISABLES DELEGATED COMPANION READ ACCESS'
+```
+
+Commands print only the local grant ID. Grant changes, conflicts, authorization decisions and
+denials are durably audited without tokens, external object IDs, subjects, raw queries or evidence text.
+Enable companion access only after the grant exists, migrations are current, Redis is reachable,
+search indexes are ready, and the non-production OBO test plan passes.
+
 ## Roles
 
 | Role | Read evidence | Record decisions | Configure controls and sources |
@@ -191,7 +227,7 @@ production.
 
 ## Known limits
 
-This milestone validates Entra access tokens but intentionally excludes OBO token acquisition,
-browser OIDC login, refresh-token handling, Entra resource provisioning, companion endpoints,
-rate limiting, and centralized session revocation. Those controls remain required before the
-companion or an internet-facing production deployment is enabled.
+This milestone validates Entra access tokens and implements the RegImpact-side companion grant,
+allowlist, evidence, audit and rate-limit boundary. It intentionally excludes OBO token
+acquisition, browser OIDC login, refresh-token handling, Entra resource provisioning, the
+companion runtime/deployment and centralized session revocation.
