@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: azure/setup-azd@v2
       - name: Compile Bicep templates
         run: |
@@ -22,10 +24,18 @@ jobs:
           az bicep build-params --file infra/staging.bicepparam --outfile /tmp/regimpact-staging.json
           az bicep build-params --file infra/production.bicepparam --outfile /tmp/regimpact-production.json
           ./scripts/validate-deployment-config.sh
-      - name: Reject generated secrets and local environment files
+      - name: Scan newly changed secrets and forbidden artifacts
+        env:
+          BASELINE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
-          test ! -f .env
-          ! git grep -nE 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}'
+          if ! git rev-parse --verify "$BASELINE_REF^{commit}" >/dev/null 2>&1; then
+            BASELINE_REF="$(git merge-base HEAD "origin/${{ github.event.repository.default_branch }}")"
+          fi
+          git diff --name-only --diff-filter=ACMR -z "$BASELINE_REF" HEAD |
+            python3 -m scripts.security_scan \
+              --repository . \
+              --baseline-ref "$BASELINE_REF" \
+              --paths-from-stdin
 
   api-domain-tests:
     runs-on: ubuntu-latest
@@ -120,14 +130,25 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e '.[dev]'
+      - run: pip install -e '.[dev]' 'pip-audit>=2.8,<3'
       - run: alembic upgrade head
       - run: ruff check src tests migrations
       - run: mypy src
       - run: pytest -q
+      - run: python -m pip_audit
 
   web-build:
     runs-on: ubuntu-latest
+    services:
+      console-redis:
+        image: redis:8-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: apps/web
@@ -139,6 +160,14 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - name: Test web authentication including Redis integration
+        env:
+          REGIMPACT_TEST_CONSOLE_REDIS_URL: redis://127.0.0.1:6380/0
+        run: npm test
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit complete dependency tree
+        run: npm audit --audit-level=high
