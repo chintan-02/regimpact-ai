@@ -1,4 +1,4 @@
-import type { Change, ChangeDetail, Ingestion, Regulation, Source } from "./types";
+import type { Change, ChangeDetail, Ingestion, Obligation, Regulation, ReviewItem, ReviewQueue, Source } from "./types";
 import { cookies } from "next/headers";
 
 export type ApiResult<T> = { data: T; error: null } | { data: null; error: string };
@@ -21,6 +21,33 @@ export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
     return { data: (await response.json()) as T, error: null };
   } catch {
     return { data: null, error: "RegImpact API is unavailable. Check the API and database services." };
+  }
+}
+
+const pageSize = 200;
+
+export async function getObligations(versionId?: string): Promise<ApiResult<Obligation[]>> {
+  const obligations: Obligation[] = [];
+  const params = new URLSearchParams({ limit: String(pageSize) });
+  if (versionId) params.set("version_id", versionId);
+  for (let offset = 0; ; offset += pageSize) {
+    params.set("offset", String(offset));
+    const result = await apiGet<Obligation[]>(`/api/v1/obligations?${params}`);
+    if (!result.data) return result;
+    obligations.push(...result.data);
+    if (result.data.length < pageSize) return { data: obligations, error: null };
+  }
+}
+
+export async function getObligationReviews(): Promise<ApiResult<ReviewItem[]>> {
+  const items: ReviewItem[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const result = await apiGet<ReviewQueue>(`/api/v1/review-queue?limit=${pageSize}&offset=${offset}`);
+    if (!result.data) return { data: null, error: result.error };
+    items.push(...result.data.items);
+    if (!result.data.items.length || items.length >= result.data.total) {
+      return { data: items, error: null };
+    }
   }
 }
 

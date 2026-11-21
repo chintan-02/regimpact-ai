@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { StatusMessage } from "../../components/StatusMessage";
-import { apiGet } from "../../lib/api";
-import type { Obligation, ReviewQueue } from "../../lib/types";
+import { getObligations, getObligationReviews } from "../../lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -11,13 +10,13 @@ function confidenceLabel(value: number) {
 
 export default async function ObligationsPage() {
   const [obligationResult, reviewResult] = await Promise.all([
-    apiGet<Obligation[]>("/api/v1/obligations?limit=500"),
-    apiGet<ReviewQueue>("/api/v1/review-queue?limit=200"),
+    getObligations(),
+    getObligationReviews(),
   ]);
   const error = obligationResult.error ?? reviewResult.error;
   const obligations = obligationResult.data ?? [];
   const reviewsByObligation = new Map(
-    (reviewResult.data?.items ?? []).map((item) => [item.obligation.id, item]),
+    (reviewResult.data ?? []).map((item) => [item.obligation.id, item]),
   );
   const reviewCount = obligations.filter((item) => item.requires_review).length;
   const withoutCandidatesCount = obligations.filter(
