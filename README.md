@@ -162,19 +162,16 @@ This distinction keeps portfolio claims verifiable and prevents library names fr
 
 ## Product walkthrough
 
-The verified v0.5.0 Azure evidence remains preserved in the release audit and GitHub Actions artifact history. The original staging resource group has since been intentionally removed as part of the cost-control lifecycle, so any new product screenshots will require a temporary redeployment rather than keeping paid infrastructure online continuously. The planned capture sequence remains:
+The current reviewer walkthrough was verified locally with Docker Compose and synthetic Directive 060 demo data.
 
-| Planned view | What it will demonstrate |
-| --- | --- |
-| Operations overview | Release health, queues, and operational state |
-| Source registry | Monitored source history and immutable versions |
-| Change evidence | Old-versus-new section comparison with citations |
-| Obligation review | Evidence, confidence, and review routing |
-| Control mapping | Ranked candidates, ambiguity, and rationale |
-| Reviewer decision | Human authority and append-only audit state |
-| Azure evidence | Successful workflow, workloads, and retained artifact |
+1. Open the § 4.2 incident-notification change and compare the sample 72-hour and 24-hour reporting windows.
+2. Trace the extracted obligation to version 2, page 43, and inspect candidate control `REG-IR-01`.
+3. Record a deferred decision as Analyst and refresh to confirm the rationale and revision persist.
+4. Reopen the same obligation as Viewer to confirm the evidence and saved decision are visible in the read-only view.
 
-Exact filenames, dimensions, redaction rules, and Markdown layout are documented in [the screenshot guide](docs/screenshots/README.md). No broken image placeholders are rendered before the assets exist.
+The [automated reviewer walkthrough](apps/api/tests/test_reviewer_walkthrough.py) runs five fresh-data trials and checks that the API returns HTTP 403 for a Viewer write. The [architecture](docs/architecture.md) describes the application, data, and worker responsibilities. The [portfolio case study](https://chintanpatel.dev/case-studies/regimpact-ai) explains the design and walkthrough.
+
+The earlier [v0.5.0 Azure staging release](docs/release-audit-v0.5.md) has its own deployment evidence. Its staging resource group was removed after validation.
 
 ## Technology
 
